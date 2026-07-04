@@ -1,0 +1,376 @@
+syntax = "proto3";
+
+package his.patient.v1;
+
+option go_package = "github.com/deloitte-us-consulting/his-be/api/patient/v1;patientv1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+
+// PatientService manages patient registration, retrieval, search, and updates.
+// All requests must include valid JWT tokens with RBAC roles: ADMIN, DOCTOR, NURSE, CLERK.
+service PatientService {
+  // CreatePatient registers a new patient. RBAC: ADMIN, CLERK.
+  rpc CreatePatient(CreatePatientRequest) returns (CreatePatientResponse);
+  
+  // GetPatient retrieves a single patient by ID. RBAC: ADMIN, DOCTOR, NURSE, CLERK.
+  rpc GetPatient(GetPatientRequest) returns (GetPatientResponse);
+  
+  // SearchPatients searches patients by MRN, name, or other fields. RBAC: ADMIN, DOCTOR, NURSE, CLERK.
+  rpc SearchPatients(SearchPatientsRequest) returns (SearchPatientsResponse);
+  
+  // ListPatients lists all patients with pagination. RBAC: ADMIN, DOCTOR, NURSE.
+  rpc ListPatients(ListPatientsRequest) returns (ListPatientsResponse);
+  
+  // UpdatePatient updates an existing patient record. RBAC: ADMIN, CLERK.
+  rpc UpdatePatient(UpdatePatientRequest) returns (UpdatePatientResponse);
+  
+  // ActivatePatient marks a patient as active. RBAC: ADMIN, CLERK.
+  rpc ActivatePatient(ActivatePatientRequest) returns (ActivatePatientResponse);
+  
+  // Health check for service readiness.
+  rpc Health(google.protobuf.Empty) returns (HealthResponse);
+}
+
+// Address information. PHI - encrypted at rest.
+message Address {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string postal_code = 4;
+  string country = 5;
+}
+
+// Emergency contact details.
+message EmergencyContact {
+  string name = 1;
+  string relation = 2;
+  string phone = 3;
+}
+
+// Insurance policy information. PHI - encrypted at rest.
+message Insurance {
+  string provider = 1;
+  string policy_no = 2;
+  string tpa = 3;
+  string member_id = 4;
+  int64 sum_insured = 5;
+  string policy_valid_till = 6; // YYYY-MM-DD
+  string corporate_name = 7;
+}
+
+// Home medication / current medication.
+message Medication {
+  string drug = 1;
+  string dose = 2;
+  string frequency = 3;
+  string notes = 4;
+}
+
+// Latest vital signs.
+message VitalSigns {
+  string bp = 1; // Format: "SYS/DIA" e.g., "120/80"
+  int32 hr = 2;
+  float temp = 3;
+  int32 spo2 = 4;
+  int32 rr = 5;
+  float weight = 6;
+  float height = 7;
+  float bmi = 8;
+  google.protobuf.Timestamp recorded_at = 9;
+}
+
+// Patient message represents a hospital patient.
+// FHIR R4 Patient resource alignment.
+message Patient {
+  // Unique patient identifier (UUID).
+  string id = 1;
+  
+  // Tenant identifier (which hospital). REQUIRED for multi-tenancy isolation.
+  string tenant_id = 2;
+  
+  // Medical Record Number (MRN). Unique per tenant.
+  string mrn = 3;
+  
+  // Patient's full name. PHI - encrypted at rest.
+  string name = 4;
+  
+  // Date of birth. PHI - encrypted at rest. YYYY-MM-DD
+  string dob = 5;
+  
+  // Gender: MALE, FEMALE, OTHER, UNKNOWN.
+  string gender = 6;
+  
+  // Blood group: A+, A-, B+, B-, AB+, AB-, O+, O-, UNKNOWN.
+  string blood_group = 7;
+  
+  // Phone number. PHI - encrypted at rest.
+  string phone = 8;
+  
+  // Email address. PHI - encrypted at rest.
+  string email = 9;
+  
+  // Residential address. PHI - encrypted at rest.
+  Address address = 10;
+  
+  // Ayushman Bharat Health Account ID. PHI - encrypted at rest.
+  string abha = 11;
+  
+  // Aadhaar number last 4 digits (masked for display).
+  string aadhaar_last_four = 12;
+  
+  // Emergency contact information.
+  EmergencyContact emergency_contact = 13;
+  
+  // Insurance policy information. PHI - encrypted at rest.
+  Insurance insurance = 14;
+  
+  // Home medications / current medications.
+  repeated Medication home_medications = 15;
+  
+  // Known allergies and adverse reactions.
+  repeated string allergies = 16;
+  
+  // Latest vital signs.
+  VitalSigns vital_signs = 17;
+  
+  // Patient status: ACTIVE, INACTIVE, ARCHIVED.
+  string status = 18;
+  
+  // Timestamp when record was created.
+  google.protobuf.Timestamp created_at = 19;
+  
+  // Timestamp when record was last updated.
+  google.protobuf.Timestamp updated_at = 20;
+  
+  // User ID who created the record.
+  string created_by = 21;
+  
+  // User ID who last updated the record.
+  string updated_by = 22;
+  
+  // Soft delete timestamp (null if not deleted).
+  google.protobuf.Timestamp deleted_at = 23;
+}
+
+// CreatePatientRequest.
+message CreatePatientRequest {
+  // Tenant ID (hospital). REQUIRED.
+  string tenant_id = 1;
+  
+  // Patient's full name. REQUIRED.
+  string name = 2;
+  
+  // Date of birth (YYYY-MM-DD). REQUIRED.
+  string dob = 3;
+  
+  // Gender: MALE, FEMALE, OTHER. REQUIRED.
+  string gender = 4;
+  
+  // Blood group: A+, A-, B+, B-, AB+, AB-, O+, O-. REQUIRED.
+  string blood_group = 5;
+  
+  // Phone number. REQUIRED.
+  string phone = 6;
+  
+  // Email address (optional).
+  string email = 7;
+  
+  // Residential address (optional).
+  Address address = 8;
+  
+  // Ayushman Bharat Health Account ID (optional).
+  string abha = 9;
+  
+  // Aadhaar number last 4 digits (optional, for verification).
+  string aadhaar_last_four = 10;
+  
+  // Emergency contact (REQUIRED).
+  EmergencyContact emergency_contact = 11;
+  
+  // Insurance policy information (optional).
+  Insurance insurance = 12;
+  
+  // Home medications (optional).
+  repeated Medication home_medications = 13;
+  
+  // Known allergies (optional).
+  repeated string allergies = 14;
+}
+
+// CreatePatientResponse.
+message CreatePatientResponse {
+  // Newly created patient.
+  Patient patient = 1;
+  
+  // Assigned MRN.
+  string mrn = 2;
+}
+
+// GetPatientRequest.
+message GetPatientRequest {
+  // Patient ID.
+  string patient_id = 1;
+  
+  // Tenant ID for verification.
+  string tenant_id = 2;
+}
+
+// GetPatientResponse.
+message GetPatientResponse {
+  // Patient details.
+  Patient patient = 1;
+}
+
+// SearchPatientsRequest.
+message SearchPatientsRequest {
+  // Tenant ID.
+  string tenant_id = 1;
+  
+  // MRN (optional, exact match).
+  string mrn = 2;
+  
+  // First name (optional, partial match).
+  string first_name = 3;
+  
+  // Last name (optional, partial match).
+  string last_name = 4;
+  
+  // Phone number (optional, exact match).
+  string phone = 5;
+  
+  // Email (optional, exact match).
+  string email = 6;
+  
+  // Page number (1-indexed). Defaults to 1.
+  int32 page = 7;
+  
+  // Page size. Defaults to 20, max 100.
+  int32 page_size = 8;
+  
+  // Status filter (optional).
+  string status = 9;
+}
+
+// SearchPatientsResponse.
+message SearchPatientsResponse {
+  // List of matching patients.
+  repeated Patient patients = 1;
+  
+  // Total count of matching records.
+  int64 total = 2;
+  
+  // Current page.
+  int32 page = 3;
+  
+  // Page size.
+  int32 page_size = 4;
+}
+
+// ListPatientsRequest.
+message ListPatientsRequest {
+  // Tenant ID.
+  string tenant_id = 1;
+  
+  // Status filter (optional).
+  string status = 2;
+  
+  // Page number (1-indexed).
+  int32 page = 3;
+  
+  // Page size.
+  int32 page_size = 4;
+  
+  // Sort by field: id, created_at, updated_at. Defaults to created_at.
+  string sort_by = 5;
+  
+  // Sort direction: asc, desc. Defaults to desc.
+  string sort_dir = 6;
+}
+
+// ListPatientsResponse.
+message ListPatientsResponse {
+  // List of patients.
+  repeated Patient patients = 1;
+  
+  // Total count.
+  int64 total = 2;
+  
+  // Current page.
+  int32 page = 3;
+  
+  // Page size.
+  int32 page_size = 4;
+}
+
+// UpdatePatientRequest.
+message UpdatePatientRequest {
+  // Patient ID. REQUIRED.
+  string patient_id = 1;
+  
+  // Tenant ID for verification. REQUIRED.
+  string tenant_id = 2;
+  
+  // Patient's full name (optional).
+  string name = 3;
+  
+  // Phone number (optional).
+  string phone = 4;
+  
+  // Email address (optional).
+  string email = 5;
+  
+  // Residential address (optional).
+  Address address = 6;
+  
+  // Emergency contact (optional).
+  EmergencyContact emergency_contact = 7;
+  
+  // Insurance policy information (optional).
+  Insurance insurance = 8;
+  
+  // Home medications (optional).
+  repeated Medication home_medications = 9;
+  
+  // Known allergies (optional).
+  repeated string allergies = 10;
+  
+  // Vital signs (optional).
+  VitalSigns vital_signs = 11;
+  
+  // Status (optional): ACTIVE, INACTIVE, ARCHIVED.
+  string status = 12;
+  
+  // User ID making the update. REQUIRED.
+  string updated_by = 13;
+}
+
+// UpdatePatientResponse.
+message UpdatePatientResponse {
+  // Updated patient.
+  Patient patient = 1;
+}
+
+// ActivatePatientRequest.
+message ActivatePatientRequest {
+  // Patient ID.
+  string patient_id = 1;
+  
+  // Tenant ID for verification.
+  string tenant_id = 2;
+}
+
+// ActivatePatientResponse.
+message ActivatePatientResponse {
+  // Activated patient.
+  Patient patient = 1;
+}
+
+// HealthResponse.
+message HealthResponse {
+  // Status: UP, DOWN.
+  string status = 1;
+  
+  // Service version.
+  string version = 2;
+}

@@ -1,0 +1,776 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>grpc: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/deloitte-us-consulting/his-be/services/patient/internal/infrastructure/grpc/handlers.go (14.7%)</option>
+				
+				<option value="file1">github.com/deloitte-us-consulting/his-be/services/patient/internal/infrastructure/grpc/server.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package grpc
+
+import (
+        "context"
+        "fmt"
+        "time"
+
+        "github.com/google/uuid"
+        "go.opentelemetry.io/otel/attribute"
+        otcodes "go.opentelemetry.io/otel/codes"
+        "google.golang.org/grpc/codes"
+        "google.golang.org/grpc/status"
+        "google.golang.org/protobuf/types/known/emptypb"
+
+        patientv1 "github.com/deloitte-us-consulting/his-be/api/patient/v1"
+        "github.com/deloitte-us-consulting/his-be/services/patient/internal/application/command"
+        "github.com/deloitte-us-consulting/his-be/services/patient/internal/application/query"
+        "github.com/deloitte-us-consulting/his-be/services/patient/internal/domain"
+)
+
+// CreatePatient implements PatientService.CreatePatient RPC
+func (ps *PatientServer) CreatePatient(ctx context.Context, req *patientv1.CreatePatientRequest) (*patientv1.CreatePatientResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.CreatePatient")
+        defer span.End()
+
+        if req.TenantId == "" || req.Name == "" || req.Phone == "" || req.Gender == "" </span><span class="cov0" title="0">{
+                span.SetStatus(otcodes.Error, "missing required fields")
+                return nil, status.Error(codes.InvalidArgument, "missing required fields: tenant_id, name, phone, gender")
+        }</span>
+
+        <span class="cov0" title="0">tenantID, err := uuid.Parse(req.TenantId)
+        if err != nil </span><span class="cov0" title="0">{
+                span.SetStatus(otcodes.Error, fmt.Sprintf("invalid tenant_id: %v", err))
+                return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid tenant_id: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">dob, err := time.Parse("2006-01-02", req.Dob)
+        if err != nil </span><span class="cov0" title="0">{
+                span.SetStatus(otcodes.Error, fmt.Sprintf("invalid dob format: %v", err))
+                return nil, status.Error(codes.InvalidArgument, "dob must be YYYY-MM-DD format")
+        }</span>
+
+        <span class="cov0" title="0">userID := uuid.New() // TODO: Extract from JWT context
+
+        address := &amp;domain.Address{}
+        if req.Address != nil </span><span class="cov0" title="0">{
+                address = &amp;domain.Address{
+                        Street:     req.Address.Street,
+                        City:       req.Address.City,
+                        State:      req.Address.State,
+                        PostalCode: req.Address.PostalCode,
+                        Country:    req.Address.Country,
+                }
+        }</span>
+
+        <span class="cov0" title="0">emergencyContact := &amp;domain.EmergencyContact{}
+        if req.EmergencyContact != nil </span><span class="cov0" title="0">{
+                emergencyContact = &amp;domain.EmergencyContact{
+                        Name:     req.EmergencyContact.Name,
+                        Relation: req.EmergencyContact.Relation,
+                        Phone:    req.EmergencyContact.Phone,
+                }
+        }</span>
+
+        <span class="cov0" title="0">var insurance *domain.Insurance
+        if req.Insurance != nil </span><span class="cov0" title="0">{
+                var policyValidTill *time.Time
+                if req.Insurance.PolicyValidTill != "" </span><span class="cov0" title="0">{
+                        pvt, err := time.Parse("2006-01-02", req.Insurance.PolicyValidTill)
+                        if err == nil </span><span class="cov0" title="0">{
+                                policyValidTill = &amp;pvt
+                        }</span>
+                }
+                <span class="cov0" title="0">insurance = &amp;domain.Insurance{
+                        Provider:        req.Insurance.Provider,
+                        PolicyNo:        req.Insurance.PolicyNo,
+                        TPA:             req.Insurance.Tpa,
+                        MemberID:        req.Insurance.MemberId,
+                        SumInsured:      req.Insurance.SumInsured,
+                        PolicyValidTill: policyValidTill,
+                        CorporateName:   req.Insurance.CorporateName,
+                }</span>
+        }
+
+        <span class="cov0" title="0">medications := make([]domain.Medication, len(req.HomeMedications))
+        for i, med := range req.HomeMedications </span><span class="cov0" title="0">{
+                medications[i] = domain.Medication{
+                        Drug:      med.Drug,
+                        Dose:      med.Dose,
+                        Frequency: med.Frequency,
+                        Notes:     med.Notes,
+                }
+        }</span>
+
+        <span class="cov0" title="0">cmd := command.CreatePatientCommand{
+                TenantID:         tenantID,
+                Name:             req.Name,
+                DOB:              dob,
+                Gender:           domain.Gender(req.Gender),
+                Phone:            req.Phone,
+                Email:            req.Email,
+                BloodGroup:       domain.BloodGroup(req.BloodGroup),
+                Address:          address,
+                EmergencyContact: emergencyContact,
+                Insurance:        insurance,
+                Allergies:        req.Allergies,
+                HomeMedications:  medications,
+                CreatedBy:        userID,
+        }
+
+        patient, err := ps.createPatientHandler.Handle(ctx, &amp;cmd)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                span.SetStatus(otcodes.Error, err.Error())
+                return nil, status.Error(codes.Internal, fmt.Sprintf("failed to create patient: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">span.SetAttributes(
+                attribute.String("patient.id", patient.ID.String()),
+                attribute.String("patient.mrn", patient.MRN),
+        )
+
+        resp := &amp;patientv1.CreatePatientResponse{
+                Patient: domainPatientToProto(patient),
+                Mrn:     patient.MRN,
+        }
+
+        return resp, nil</span>
+}
+
+// GetPatient implements PatientService.GetPatient RPC
+func (ps *PatientServer) GetPatient(ctx context.Context, req *patientv1.GetPatientRequest) (*patientv1.GetPatientResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.GetPatient")
+        defer span.End()
+
+        if req.TenantId == "" || req.PatientId == "" </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, "missing required fields: patient_id, tenant_id")
+        }</span>
+
+        <span class="cov0" title="0">tenantID, err := uuid.Parse(req.TenantId)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid tenant_id: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">q := query.GetPatientByMRNQuery{
+                TenantID: tenantID,
+                MRN:      req.PatientId,
+        }
+
+        patient, err := ps.getPatientByMRNHandler.Handle(ctx, &amp;q)
+        if err != nil </span><span class="cov0" title="0">{
+                if err == domain.ErrNotFound </span><span class="cov0" title="0">{
+                        span.SetStatus(otcodes.Error, "patient not found")
+                        return nil, status.Error(codes.NotFound, "patient not found")
+                }</span>
+                <span class="cov0" title="0">span.RecordError(err)
+                span.SetStatus(otcodes.Error, err.Error())
+                return nil, status.Error(codes.Internal, fmt.Sprintf("failed to get patient: %v", err))</span>
+        }
+
+        <span class="cov0" title="0">span.SetAttributes(
+                attribute.String("patient.id", patient.ID.String()),
+                attribute.String("patient.mrn", patient.MRN),
+        )
+
+        resp := &amp;patientv1.GetPatientResponse{
+                Patient: domainPatientToProto(patient),
+        }
+
+        return resp, nil</span>
+}
+
+// SearchPatients implements PatientService.SearchPatients RPC
+func (ps *PatientServer) SearchPatients(ctx context.Context, req *patientv1.SearchPatientsRequest) (*patientv1.SearchPatientsResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.SearchPatients")
+        defer span.End()
+
+        if req.TenantId == "" </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, "missing tenant_id")
+        }</span>
+
+        <span class="cov0" title="0">tenantID, err := uuid.Parse(req.TenantId)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid tenant_id: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">searchTerm := ""
+        if req.Mrn != "" </span><span class="cov0" title="0">{
+                searchTerm = req.Mrn
+        }</span> else<span class="cov0" title="0"> if req.FirstName != "" || req.LastName != "" </span><span class="cov0" title="0">{
+                searchTerm = req.FirstName + " " + req.LastName
+        }</span> else<span class="cov0" title="0"> if req.Phone != "" </span><span class="cov0" title="0">{
+                searchTerm = req.Phone
+        }</span>
+
+        <span class="cov0" title="0">offset := 0
+        limit := int(req.PageSize)
+        if limit &lt;= 0 </span><span class="cov0" title="0">{
+                limit = 20
+        }</span>
+        <span class="cov0" title="0">if limit &gt; 100 </span><span class="cov0" title="0">{
+                limit = 100
+        }</span>
+        <span class="cov0" title="0">if req.Page &gt; 1 </span><span class="cov0" title="0">{
+                offset = int((req.Page - 1) * req.PageSize)
+        }</span>
+
+        <span class="cov0" title="0">q := query.SearchPatientsQuery{
+                TenantID: tenantID,
+                Query:    searchTerm,
+                Offset:   offset,
+                Limit:    limit,
+        }
+
+        patients, total, err := ps.searchPatientsHandler.Handle(ctx, &amp;q)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                span.SetStatus(otcodes.Error, err.Error())
+                return nil, status.Error(codes.Internal, fmt.Sprintf("failed to search patients: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">protoPatients := make([]*patientv1.Patient, len(patients))
+        for i, p := range patients </span><span class="cov0" title="0">{
+                protoPatients[i] = domainPatientToProto(p)
+        }</span>
+
+        <span class="cov0" title="0">span.SetAttributes(attribute.Int64("results.count", total))
+
+        resp := &amp;patientv1.SearchPatientsResponse{
+                Patients: protoPatients,
+                Total:    total,
+                Page:     req.Page,
+                PageSize: int32(limit),
+        }
+
+        return resp, nil</span>
+}
+
+// ListPatients implements PatientService.ListPatients RPC
+func (ps *PatientServer) ListPatients(ctx context.Context, req *patientv1.ListPatientsRequest) (*patientv1.ListPatientsResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.ListPatients")
+        defer span.End()
+
+        if req.TenantId == "" </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, "missing tenant_id")
+        }</span>
+
+        <span class="cov0" title="0">tenantID, err := uuid.Parse(req.TenantId)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid tenant_id: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">limit := int(req.PageSize)
+        if limit &lt;= 0 </span><span class="cov0" title="0">{
+                limit = 20
+        }</span>
+        <span class="cov0" title="0">if limit &gt; 100 </span><span class="cov0" title="0">{
+                limit = 100
+        }</span>
+        <span class="cov0" title="0">offset := 0
+        if req.Page &gt; 1 </span><span class="cov0" title="0">{
+                offset = int((req.Page - 1) * req.PageSize)
+        }</span>
+
+        <span class="cov0" title="0">q := query.ListPatientsQuery{
+                TenantID: tenantID,
+                Offset:   offset,
+                Limit:    limit,
+        }
+
+        patients, total, err := ps.listPatientsHandler.Handle(ctx, &amp;q)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                span.SetStatus(otcodes.Error, err.Error())
+                return nil, status.Error(codes.Internal, fmt.Sprintf("failed to list patients: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">protoPatients := make([]*patientv1.Patient, len(patients))
+        for i, p := range patients </span><span class="cov0" title="0">{
+                protoPatients[i] = domainPatientToProto(p)
+        }</span>
+
+        <span class="cov0" title="0">span.SetAttributes(attribute.Int64("results.count", total))
+
+        resp := &amp;patientv1.ListPatientsResponse{
+                Patients: protoPatients,
+                Total:    total,
+                Page:     req.Page,
+                PageSize: int32(limit),
+        }
+
+        return resp, nil</span>
+}
+
+// UpdatePatient implements PatientService.UpdatePatient RPC
+func (ps *PatientServer) UpdatePatient(ctx context.Context, req *patientv1.UpdatePatientRequest) (*patientv1.UpdatePatientResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.UpdatePatient")
+        defer span.End()
+
+        if req.TenantId == "" || req.PatientId == "" </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, "missing required fields: patient_id, tenant_id")
+        }</span>
+
+        <span class="cov0" title="0">tenantID, err := uuid.Parse(req.TenantId)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("invalid tenant_id: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">updatedBy := uuid.New() // TODO: Extract from JWT context
+
+        if req.Name != "" || req.Phone != "" || req.Email != "" || req.Address != nil </span><span class="cov0" title="0">{
+                var address *domain.Address
+                if req.Address != nil </span><span class="cov0" title="0">{
+                        address = &amp;domain.Address{
+                                Street:     req.Address.Street,
+                                City:       req.Address.City,
+                                State:      req.Address.State,
+                                PostalCode: req.Address.PostalCode,
+                                Country:    req.Address.Country,
+                        }
+                }</span>
+
+                <span class="cov0" title="0">cmd := command.UpdateDemographicsCommand{
+                        TenantID:  tenantID,
+                        MRN:       req.PatientId,
+                        Name:      req.Name,
+                        Phone:     req.Phone,
+                        Email:     req.Email,
+                        Address:   address,
+                        UpdatedBy: updatedBy,
+                }
+
+                _, err := ps.updateDemographicsHandler.Handle(ctx, &amp;cmd)
+                if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+                        span.SetStatus(otcodes.Error, err.Error())
+                        return nil, status.Error(codes.Internal, fmt.Sprintf("failed to update patient demographics: %v", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">if req.Insurance != nil </span><span class="cov0" title="0">{
+                var policyValidTill *time.Time
+                if req.Insurance.PolicyValidTill != "" </span><span class="cov0" title="0">{
+                        pvt, err := time.Parse("2006-01-02", req.Insurance.PolicyValidTill)
+                        if err == nil </span><span class="cov0" title="0">{
+                                policyValidTill = &amp;pvt
+                        }</span>
+                }
+
+                <span class="cov0" title="0">insurance := &amp;domain.Insurance{
+                        Provider:        req.Insurance.Provider,
+                        PolicyNo:        req.Insurance.PolicyNo,
+                        TPA:             req.Insurance.Tpa,
+                        MemberID:        req.Insurance.MemberId,
+                        SumInsured:      req.Insurance.SumInsured,
+                        PolicyValidTill: policyValidTill,
+                        CorporateName:   req.Insurance.CorporateName,
+                }
+
+                cmd := command.UpdateInsuranceCommand{
+                        TenantID:  tenantID,
+                        MRN:       req.PatientId,
+                        Insurance: insurance,
+                        UpdatedBy: updatedBy,
+                }
+
+                _, err := ps.updateInsuranceHandler.Handle(ctx, &amp;cmd)
+                if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+                        span.SetStatus(otcodes.Error, err.Error())
+                        return nil, status.Error(codes.Internal, fmt.Sprintf("failed to update patient insurance: %v", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">if len(req.Allergies) &gt; 0 </span><span class="cov0" title="0">{
+                cmd := command.RecordAllergiesCommand{
+                        TenantID:  tenantID,
+                        MRN:       req.PatientId,
+                        Allergies: req.Allergies,
+                        UpdatedBy: updatedBy,
+                }
+
+                _, err := ps.recordAllergiesHandler.Handle(ctx, &amp;cmd)
+                if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+                        span.SetStatus(otcodes.Error, err.Error())
+                        return nil, status.Error(codes.Internal, fmt.Sprintf("failed to record allergies: %v", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">if len(req.HomeMedications) &gt; 0 </span><span class="cov0" title="0">{
+                medications := make([]domain.Medication, len(req.HomeMedications))
+                for i, med := range req.HomeMedications </span><span class="cov0" title="0">{
+                        medications[i] = domain.Medication{
+                                Drug:      med.Drug,
+                                Dose:      med.Dose,
+                                Frequency: med.Frequency,
+                                Notes:     med.Notes,
+                        }
+                }</span>
+
+                <span class="cov0" title="0">cmd := command.RecordMedicationsCommand{
+                        TenantID:    tenantID,
+                        MRN:         req.PatientId,
+                        Medications: medications,
+                        UpdatedBy:   updatedBy,
+                }
+
+                _, err := ps.recordMedicationsHandler.Handle(ctx, &amp;cmd)
+                if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+                        span.SetStatus(otcodes.Error, err.Error())
+                        return nil, status.Error(codes.Internal, fmt.Sprintf("failed to record medications: %v", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">if req.VitalSigns != nil </span><span class="cov0" title="0">{
+                vitals := &amp;domain.VitalSigns{
+                        BP: req.VitalSigns.Bp,
+                }
+
+                if req.VitalSigns.Hr &gt; 0 </span><span class="cov0" title="0">{
+                        hr := int(req.VitalSigns.Hr)
+                        vitals.HR = &amp;hr
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.Temp &gt; 0 </span><span class="cov0" title="0">{
+                        vitals.Temp = &amp;req.VitalSigns.Temp
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.Spo2 &gt; 0 </span><span class="cov0" title="0">{
+                        spo2 := int(req.VitalSigns.Spo2)
+                        vitals.SpO2 = &amp;spo2
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.Rr &gt; 0 </span><span class="cov0" title="0">{
+                        rr := int(req.VitalSigns.Rr)
+                        vitals.RR = &amp;rr
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.Weight &gt; 0 </span><span class="cov0" title="0">{
+                        vitals.Weight = &amp;req.VitalSigns.Weight
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.Height &gt; 0 </span><span class="cov0" title="0">{
+                        height := int(req.VitalSigns.Height)
+                        vitals.Height = &amp;height
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.Bmi &gt; 0 </span><span class="cov0" title="0">{
+                        vitals.BMI = &amp;req.VitalSigns.Bmi
+                }</span>
+                <span class="cov0" title="0">if req.VitalSigns.RecordedAt != nil </span><span class="cov0" title="0">{
+                        recordedAt := *req.VitalSigns.RecordedAt
+                        vitals.RecordedAt = &amp;recordedAt
+                }</span>
+
+                <span class="cov0" title="0">cmd := command.RecordVitalSignsCommand{
+                        TenantID:   tenantID,
+                        MRN:        req.PatientId,
+                        VitalSigns: vitals,
+                        UpdatedBy:  updatedBy,
+                }
+
+                _, err := ps.recordVitalSignsHandler.Handle(ctx, &amp;cmd)
+                if err != nil </span><span class="cov0" title="0">{
+                        span.RecordError(err)
+                        span.SetStatus(otcodes.Error, err.Error())
+                        return nil, status.Error(codes.Internal, fmt.Sprintf("failed to record vital signs: %v", err))
+                }</span>
+        }
+
+        <span class="cov0" title="0">q := query.GetPatientByMRNQuery{
+                TenantID: tenantID,
+                MRN:      req.PatientId,
+        }
+
+        patient, err := ps.getPatientByMRNHandler.Handle(ctx, &amp;q)
+        if err != nil </span><span class="cov0" title="0">{
+                span.RecordError(err)
+                span.SetStatus(otcodes.Error, err.Error())
+                return nil, status.Error(codes.Internal, fmt.Sprintf("failed to fetch updated patient: %v", err))
+        }</span>
+
+        <span class="cov0" title="0">span.SetAttributes(attribute.String("patient.id", patient.ID.String()))
+
+        resp := &amp;patientv1.UpdatePatientResponse{
+                Patient: domainPatientToProto(patient),
+        }
+
+        return resp, nil</span>
+}
+
+// ActivatePatient implements PatientService.ActivatePatient RPC
+func (ps *PatientServer) ActivatePatient(ctx context.Context, req *patientv1.ActivatePatientRequest) (*patientv1.ActivatePatientResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.ActivatePatient")
+        defer span.End()
+
+        // TODO: Implement activation logic
+        span.SetStatus(otcodes.Error, "not implemented")
+        return nil, status.Error(codes.Unimplemented, "ActivatePatient not yet implemented")
+}</span>
+
+// Health implements PatientService.Health RPC
+func (ps *PatientServer) Health(ctx context.Context, _ *emptypb.Empty) (*patientv1.HealthResponse, error) <span class="cov0" title="0">{
+        ctx, span := tracer.Start(ctx, "PatientService.Health")
+        defer span.End()
+
+        resp := &amp;patientv1.HealthResponse{
+                Status: "SERVING",
+        }
+
+        return resp, nil
+}</span>
+
+// domainPatientToProto converts domain.Patient to proto Patient
+func domainPatientToProto(p *domain.Patient) *patientv1.Patient <span class="cov8" title="1">{
+        pp := &amp;patientv1.Patient{
+                Id:              p.ID.String(),
+                TenantId:        p.TenantID.String(),
+                Mrn:             p.MRN,
+                Name:            p.Name,
+                Dob:             p.DOB.Format("2006-01-02"),
+                Gender:          string(p.Gender),
+                BloodGroup:      string(p.BloodGroup),
+                Phone:           p.Phone,
+                Email:           p.Email,
+                Abha:            p.ABHA,
+                AadhaarLastFour: p.AadhaarLast4,
+                Status:          string(p.Status),
+                CreatedBy:       p.CreatedBy.String(),
+                UpdatedBy:       p.UpdatedBy.String(),
+        }
+
+        // Convert timestamps
+        if !p.CreatedAt.IsZero() </span><span class="cov8" title="1">{
+                pp.CreatedAt = &amp;p.CreatedAt
+        }</span>
+        <span class="cov8" title="1">if !p.UpdatedAt.IsZero() </span><span class="cov8" title="1">{
+                pp.UpdatedAt = &amp;p.UpdatedAt
+        }</span>
+        <span class="cov8" title="1">if p.DeletedAt != nil </span><span class="cov8" title="1">{
+                pp.DeletedAt = p.DeletedAt
+        }</span>
+
+        <span class="cov8" title="1">if p.Address != nil </span><span class="cov8" title="1">{
+                pp.Address = &amp;patientv1.Address{
+                        Street:     p.Address.Street,
+                        City:       p.Address.City,
+                        State:      p.Address.State,
+                        PostalCode: p.Address.PostalCode,
+                        Country:    p.Address.Country,
+                }
+        }</span>
+
+        <span class="cov8" title="1">if p.EmergencyContact != nil </span><span class="cov8" title="1">{
+                pp.EmergencyContact = &amp;patientv1.EmergencyContact{
+                        Name:     p.EmergencyContact.Name,
+                        Relation: p.EmergencyContact.Relation,
+                        Phone:    p.EmergencyContact.Phone,
+                }
+        }</span>
+
+        <span class="cov8" title="1">if p.Insurance != nil </span><span class="cov8" title="1">{
+                pp.Insurance = &amp;patientv1.Insurance{
+                        Provider:      p.Insurance.Provider,
+                        PolicyNo:      p.Insurance.PolicyNo,
+                        Tpa:           p.Insurance.TPA,
+                        MemberId:      p.Insurance.MemberID,
+                        SumInsured:    p.Insurance.SumInsured,
+                        CorporateName: p.Insurance.CorporateName,
+                }
+                if p.Insurance.PolicyValidTill != nil </span><span class="cov8" title="1">{
+                        pp.Insurance.PolicyValidTill = p.Insurance.PolicyValidTill.Format("2006-01-02")
+                }</span>
+        }
+
+        <span class="cov8" title="1">pp.Allergies = p.Allergies
+
+        for _, med := range p.HomeMedications </span><span class="cov8" title="1">{
+                pp.HomeMedications = append(pp.HomeMedications, &amp;patientv1.Medication{
+                        Drug:      med.Drug,
+                        Dose:      med.Dose,
+                        Frequency: med.Frequency,
+                        Notes:     med.Notes,
+                })
+        }</span>
+
+        <span class="cov8" title="1">if p.VitalSigns != nil </span><span class="cov8" title="1">{
+                vs := &amp;patientv1.VitalSigns{
+                        Bp: p.VitalSigns.BP,
+                }
+                if p.VitalSigns.HR != nil </span><span class="cov8" title="1">{
+                        vs.Hr = int32(*p.VitalSigns.HR)
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.Temp != nil </span><span class="cov8" title="1">{
+                        vs.Temp = *p.VitalSigns.Temp
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.SpO2 != nil </span><span class="cov8" title="1">{
+                        vs.Spo2 = int32(*p.VitalSigns.SpO2)
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.RR != nil </span><span class="cov8" title="1">{
+                        vs.Rr = int32(*p.VitalSigns.RR)
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.Weight != nil </span><span class="cov8" title="1">{
+                        vs.Weight = *p.VitalSigns.Weight
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.Height != nil </span><span class="cov8" title="1">{
+                        vs.Height = int32(*p.VitalSigns.Height)
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.BMI != nil </span><span class="cov8" title="1">{
+                        vs.Bmi = *p.VitalSigns.BMI
+                }</span>
+                <span class="cov8" title="1">if p.VitalSigns.RecordedAt != nil &amp;&amp; !p.VitalSigns.RecordedAt.IsZero() </span><span class="cov0" title="0">{
+                        vs.RecordedAt = p.VitalSigns.RecordedAt
+                }</span>
+                <span class="cov8" title="1">pp.VitalSigns = vs</span>
+        }
+
+        <span class="cov8" title="1">return pp</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package grpc
+
+import (
+        "go.opentelemetry.io/otel"
+
+        patientv1 "github.com/deloitte-us-consulting/his-be/api/patient/v1"
+        "github.com/deloitte-us-consulting/his-be/services/patient/internal/application/command"
+        "github.com/deloitte-us-consulting/his-be/services/patient/internal/application/query"
+        "github.com/deloitte-us-consulting/his-be/services/patient/internal/domain"
+)
+
+var tracer = otel.Tracer("his-patient-service")
+
+// PatientServer implements the gRPC PatientService.
+type PatientServer struct {
+        patientv1.UnimplementedPatientServiceServer
+        patientService            *domain.PatientService
+        createPatientHandler      *command.CreatePatientHandler
+        updateDemographicsHandler *command.UpdateDemographicsHandler
+        updateInsuranceHandler    *command.UpdateInsuranceHandler
+        recordAllergiesHandler    *command.RecordAllergiesHandler
+        recordMedicationsHandler  *command.RecordMedicationsHandler
+        recordVitalSignsHandler   *command.RecordVitalSignsHandler
+        getPatientByMRNHandler    *query.GetPatientByMRNHandler
+        searchPatientsHandler     *query.SearchPatientsHandler
+        listPatientsHandler       *query.ListPatientsHandler
+}
+
+// NewPatientServer creates a new gRPC patient server.
+func NewPatientServer(
+        patientSvc *domain.PatientService,
+        createPtHandler *command.CreatePatientHandler,
+        updateDemoHandler *command.UpdateDemographicsHandler,
+        updateInsHandler *command.UpdateInsuranceHandler,
+        recordAllergiesH *command.RecordAllergiesHandler,
+        recordMedsH *command.RecordMedicationsHandler,
+        recordVitalsH *command.RecordVitalSignsHandler,
+        getByMRNHandler *query.GetPatientByMRNHandler,
+        searchPtsHandler *query.SearchPatientsHandler,
+        listPtsHandler *query.ListPatientsHandler,
+) *PatientServer <span class="cov0" title="0">{
+        return &amp;PatientServer{
+                patientService:            patientSvc,
+                createPatientHandler:      createPtHandler,
+                updateDemographicsHandler: updateDemoHandler,
+                updateInsuranceHandler:    updateInsHandler,
+                recordAllergiesHandler:    recordAllergiesH,
+                recordMedicationsHandler:  recordMedsH,
+                recordVitalSignsHandler:   recordVitalsH,
+                getPatientByMRNHandler:    getByMRNHandler,
+                searchPatientsHandler:     searchPtsHandler,
+                listPatientsHandler:       listPtsHandler,
+        }
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

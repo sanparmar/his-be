@@ -1,0 +1,21 @@
+server:
+  port: 50051
+  healthCheckPort: 8081
+  gracefulTimeout: 30
+
+database:
+  host: localhost
+  port: 5432
+  user: postgres
+  password: postgres
+  dbname: his_patient
+  sslmode: disable
+  maxConns: 25
+
+kafka:
+  brokers:
+    - localhost:9092
+  groupId: his-patient-service
+
+logging:
+  level: info

@@ -8,15 +8,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// MockPatientRepository is a mock implementation for testing.
 type MockPatientRepository struct {
-	createFunc  func(ctx context.Context, patient *Patient) error
-	getByIDFunc func(ctx context.Context, id, tenantID uuid.UUID) (*Patient, error)
-	searchFunc  func(ctx context.Context, tenantID uuid.UUID, query *PatientQuery) ([]*Patient, int64, error)
-	listFunc    func(ctx context.Context, tenantID uuid.UUID, page, pageSize int, sortBy, sortDir string) ([]*Patient, int64, error)
-	updateFunc  func(ctx context.Context, patient *Patient) error
+	createFunc   func(ctx context.Context, patient *Patient) error
+	getByIDFunc  func(ctx context.Context, tenantID, patientID uuid.UUID) (*Patient, error)
+	getByMRNFunc func(ctx context.Context, tenantID uuid.UUID, mrn string) (*Patient, error)
+	updateFunc   func(ctx context.Context, patient *Patient) error
+	deleteFunc   func(ctx context.Context, tenantID, patientID uuid.UUID, deletedBy uuid.UUID) error
+	listFunc     func(ctx context.Context, tenantID uuid.UUID, offset, limit int, statusFilter *PatientStatus) ([]*Patient, int64, error)
+	searchFunc   func(ctx context.Context, tenantID uuid.UUID, query string, offset, limit int) ([]*Patient, int64, error)
 }
 
 func (m *MockPatientRepository) Create(ctx context.Context, patient *Patient) error {
@@ -26,29 +28,18 @@ func (m *MockPatientRepository) Create(ctx context.Context, patient *Patient) er
 	return nil
 }
 
-func (m *MockPatientRepository) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*Patient, error) {
+func (m *MockPatientRepository) GetByID(ctx context.Context, tenantID, patientID uuid.UUID) (*Patient, error) {
 	if m.getByIDFunc != nil {
-		return m.getByIDFunc(ctx, id, tenantID)
+		return m.getByIDFunc(ctx, tenantID, patientID)
 	}
 	return nil, ErrNotFound
 }
 
-func (m *MockPatientRepository) GetByMRN(ctx context.Context, mrn string, tenantID uuid.UUID) (*Patient, error) {
+func (m *MockPatientRepository) GetByMRN(ctx context.Context, tenantID uuid.UUID, mrn string) (*Patient, error) {
+	if m.getByMRNFunc != nil {
+		return m.getByMRNFunc(ctx, tenantID, mrn)
+	}
 	return nil, ErrNotFound
-}
-
-func (m *MockPatientRepository) Search(ctx context.Context, tenantID uuid.UUID, query *PatientQuery) ([]*Patient, int64, error) {
-	if m.searchFunc != nil {
-		return m.searchFunc(ctx, tenantID, query)
-	}
-	return []*Patient{}, 0, nil
-}
-
-func (m *MockPatientRepository) List(ctx context.Context, tenantID uuid.UUID, page, pageSize int, sortBy, sortDir string) ([]*Patient, int64, error) {
-	if m.listFunc != nil {
-		return m.listFunc(ctx, tenantID, page, pageSize, sortBy, sortDir)
-	}
-	return []*Patient{}, 0, nil
 }
 
 func (m *MockPatientRepository) Update(ctx context.Context, patient *Patient) error {
@@ -58,231 +49,170 @@ func (m *MockPatientRepository) Update(ctx context.Context, patient *Patient) er
 	return nil
 }
 
-// Test cases
-
-func TestNewPatient(t *testing.T) {
-	tenantID := uuid.New()
-	createdBy := uuid.New()
-
-	tests := []struct {
-		name      string
-		firstName string
-		lastName  string
-		dob       string
-		gender    string
-		phone     string
-		email     string
-	}{
-		{
-			name:      "valid patient",
-			firstName: "John",
-			lastName:  "Doe",
-			dob:       "1990-01-15",
-			gender:    "MALE",
-			phone:     "1234567890",
-			email:     "john@example.com",
-		},
-		{
-			name:      "female patient",
-			firstName: "Jane",
-			lastName:  "Smith",
-			dob:       "1985-05-20",
-			gender:    "FEMALE",
-			phone:     "0987654321",
-			email:     "jane@example.com",
-		},
+func (m *MockPatientRepository) Delete(ctx context.Context, tenantID, patientID uuid.UUID, deletedBy uuid.UUID) error {
+	if m.deleteFunc != nil {
+		return m.deleteFunc(ctx, tenantID, patientID, deletedBy)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			patient := NewPatient(tenantID, tt.firstName, tt.lastName, tt.dob, tt.gender, tt.phone, tt.email, createdBy)
-
-			assert.NotEqual(t, uuid.Nil, patient.ID)
-			assert.Equal(t, tenantID, patient.TenantID)
-			assert.Equal(t, tt.firstName, patient.FirstName)
-			assert.Equal(t, tt.lastName, patient.LastName)
-			assert.Equal(t, tt.dob, patient.DOB)
-			assert.Equal(t, tt.gender, patient.Gender)
-			assert.Equal(t, tt.phone, patient.Phone)
-			assert.Equal(t, tt.email, patient.Email)
-			assert.Equal(t, string(PatientStatusRegistered), patient.Status)
-			assert.Equal(t, createdBy, patient.CreatedBy)
-			assert.NotNil(t, patient.CreatedAt)
-		})
-	}
+	return nil
 }
 
-func TestPatientUpdateContact(t *testing.T) {
-	patient := &Patient{
-		ID:       uuid.New(),
-		TenantID: uuid.New(),
-		Phone:    "1234567890",
-		Email:    "old@example.com",
+func (m *MockPatientRepository) List(ctx context.Context, tenantID uuid.UUID, offset, limit int, statusFilter *PatientStatus) ([]*Patient, int64, error) {
+	if m.listFunc != nil {
+		return m.listFunc(ctx, tenantID, offset, limit, statusFilter)
 	}
-
-	updatedBy := uuid.New()
-	newPhone := "9876543210"
-	newEmail := "new@example.com"
-	oldUpdatedAt := patient.UpdatedAt
-
-	time.Sleep(10 * time.Millisecond)
-	patient.UpdateContact(newPhone, newEmail, updatedBy)
-
-	assert.Equal(t, newPhone, patient.Phone)
-	assert.Equal(t, newEmail, patient.Email)
-	assert.Equal(t, updatedBy, patient.UpdatedBy)
-	assert.True(t, patient.UpdatedAt.After(oldUpdatedAt))
+	return nil, 0, nil
 }
 
-func TestPatientActivate(t *testing.T) {
-	patient := &Patient{
-		ID:     uuid.New(),
-		Status: string(PatientStatusRegistered),
+func (m *MockPatientRepository) Search(ctx context.Context, tenantID uuid.UUID, query string, offset, limit int) ([]*Patient, int64, error) {
+	if m.searchFunc != nil {
+		return m.searchFunc(ctx, tenantID, query, offset, limit)
 	}
-
-	updatedBy := uuid.New()
-	patient.Activate(updatedBy)
-
-	assert.Equal(t, string(PatientStatusActive), patient.Status)
-	assert.Equal(t, updatedBy, patient.UpdatedBy)
+	return nil, 0, nil
 }
 
-func TestPatientIsActive(t *testing.T) {
-	tests := []struct {
-		name     string
-		status   string
-		expected bool
-	}{
-		{name: "active status", status: string(PatientStatusActive), expected: true},
-		{name: "registered status", status: string(PatientStatusRegistered), expected: false},
-		{name: "inactive status", status: string(PatientStatusInactive), expected: false},
-		{name: "discharged status", status: string(PatientStatusDischarged), expected: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			patient := &Patient{Status: tt.status}
-			assert.Equal(t, tt.expected, patient.IsActive())
-		})
-	}
+func (m *MockPatientRepository) GetAuditLog(ctx context.Context, tenantID, patientID uuid.UUID, offset, limit int) ([]*AuditLog, error) {
+	return nil, nil
 }
 
 func TestPatientServiceRegisterPatient(t *testing.T) {
 	tenantID := uuid.New()
 	createdBy := uuid.New()
+	dob := time.Date(1990, time.January, 15, 0, 0, 0, 0, time.UTC)
 
-	tests := []struct {
-		name      string
-		firstName string
-		lastName  string
-		dob       string
-		gender    string
-		phone     string
-		email     string
-		mockError error
-		expectErr bool
-	}{
-		{
-			name:      "successful registration",
-			firstName: "John",
-			lastName:  "Doe",
-			dob:       "1990-01-15",
-			gender:    "MALE",
-			phone:     "1234567890",
-			email:     "john@example.com",
-			expectErr: false,
-		},
-		{
-			name:      "repository error",
-			firstName: "Jane",
-			lastName:  "Smith",
-			dob:       "1985-05-20",
-			gender:    "FEMALE",
-			phone:     "0987654321",
-			email:     "jane@example.com",
-			mockError: errors.New("db error"),
-			expectErr: true,
-		},
-		{
-			name:      "missing first name",
-			firstName: "",
-			lastName:  "Smith",
-			dob:       "1985-05-20",
-			gender:    "FEMALE",
-			phone:     "0987654321",
-			email:     "jane@example.com",
-			expectErr: true,
-		},
-	}
+	t.Run("successful registration", func(t *testing.T) {
+		mockRepo := &MockPatientRepository{}
+		svc := NewPatientService(mockRepo)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := &MockPatientRepository{
-				createFunc: func(ctx context.Context, patient *Patient) error {
-					return tt.mockError
-				},
-			}
-
-			svc := NewPatientService(mockRepo)
-			patient, err := svc.RegisterPatient(ctx, tenantID, tt.firstName, tt.lastName, tt.dob, tt.gender, tt.phone, tt.email, createdBy)
-
-			if tt.expectErr {
-				assert.Error(t, err)
-				assert.Nil(t, patient)
-			} else {
-				assert.NoError(t, err)
-				assert.NotNil(t, patient)
-				assert.Equal(t, tt.firstName, patient.FirstName)
-				assert.Equal(t, tt.lastName, patient.LastName)
-			}
+		patient, event, err := svc.RegisterPatient(context.Background(), RegisterPatientInput{
+			TenantID:         tenantID,
+			Name:             "John Doe",
+			DOB:              dob,
+			Gender:           GenderMale,
+			Phone:            "+919876543210",
+			Email:            "john@example.com",
+			BloodGroup:       BloodGroupOPlus,
+			EmergencyContact: &EmergencyContact{Name: "Jane Doe", Relation: "Spouse", Phone: "+919900000000"},
+			CreatedBy:        createdBy,
 		})
-	}
+
+		require.NoError(t, err)
+		require.NotNil(t, patient)
+		require.NotNil(t, event)
+		assert.Equal(t, tenantID, patient.TenantID)
+		assert.Equal(t, patient.ID, event.PatientID)
+		assert.Equal(t, patient.MRN, event.MRN)
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		mockRepo := &MockPatientRepository{
+			createFunc: func(ctx context.Context, patient *Patient) error {
+				return errors.New("db error")
+			},
+		}
+		svc := NewPatientService(mockRepo)
+
+		patient, event, err := svc.RegisterPatient(context.Background(), RegisterPatientInput{
+			TenantID:         tenantID,
+			Name:             "Jane Doe",
+			DOB:              dob,
+			Gender:           GenderFemale,
+			Phone:            "+919800000000",
+			BloodGroup:       BloodGroupAPlusPlus,
+			EmergencyContact: &EmergencyContact{Name: "John Doe", Relation: "Brother", Phone: "+919811111111"},
+			CreatedBy:        createdBy,
+		})
+
+		require.Error(t, err)
+		assert.Nil(t, patient)
+		assert.Nil(t, event)
+	})
 }
 
-func TestPatientServiceGetPatient(t *testing.T) {
-	patientID := uuid.New()
+func TestPatientServiceGetPatientByMRN(t *testing.T) {
+	expected := &Patient{ID: uuid.New(), TenantID: uuid.New(), MRN: "MRN-123", Name: "John Doe"}
+	mockRepo := &MockPatientRepository{
+		getByMRNFunc: func(ctx context.Context, tenantID uuid.UUID, mrn string) (*Patient, error) {
+			assert.Equal(t, expected.TenantID, tenantID)
+			assert.Equal(t, expected.MRN, mrn)
+			return expected, nil
+		},
+	}
+
+	svc := NewPatientService(mockRepo)
+	patient, err := svc.GetPatientByMRN(context.Background(), expected.TenantID, expected.MRN)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, patient)
+}
+
+func TestPatientServiceListPatients(t *testing.T) {
 	tenantID := uuid.New()
-	expectedPatient := &Patient{ID: patientID, TenantID: tenantID}
-
-	tests := []struct {
-		name      string
-		mockError error
-		expectErr bool
-	}{
-		{
-			name:      "patient found",
-			expectErr: false,
-		},
-		{
-			name:      "patient not found",
-			mockError: ErrNotFound,
-			expectErr: true,
+	expected := []*Patient{{ID: uuid.New(), TenantID: tenantID, Status: PatientStatusActive}}
+	mockRepo := &MockPatientRepository{
+		listFunc: func(ctx context.Context, gotTenantID uuid.UUID, offset, limit int, statusFilter *PatientStatus) ([]*Patient, int64, error) {
+			require.NotNil(t, statusFilter)
+			assert.Equal(t, PatientStatusActive, *statusFilter)
+			assert.Equal(t, tenantID, gotTenantID)
+			assert.Equal(t, 0, offset)
+			assert.Equal(t, 25, limit)
+			return expected, int64(len(expected)), nil
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockRepo := &MockPatientRepository{
-				getByIDFunc: func(ctx context.Context, id, tid uuid.UUID) (*Patient, error) {
-					if tt.mockError != nil {
-						return nil, tt.mockError
-					}
-					return expectedPatient, nil
-				},
-			}
+	svc := NewPatientService(mockRepo)
+	patients, total, err := svc.ListPatients(context.Background(), tenantID, 0, 25)
 
-			svc := NewPatientService(mockRepo)
-			patient, err := svc.GetPatient(ctx, patientID, tenantID)
-
-			if tt.expectErr {
-				assert.Error(t, err)
-				assert.Nil(t, patient)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, expectedPatient, patient)
-			}
-		})
-	}
+	require.NoError(t, err)
+	assert.Equal(t, expected, patients)
+	assert.Equal(t, int64(1), total)
 }
 
-var ctx = context.Background()
+func TestPatientServiceSearchPatients(t *testing.T) {
+	tenantID := uuid.New()
+	query := "john"
+	expected := []*Patient{{ID: uuid.New(), TenantID: tenantID, Name: "John Doe"}}
+	mockRepo := &MockPatientRepository{
+		searchFunc: func(ctx context.Context, gotTenantID uuid.UUID, gotQuery string, offset, limit int) ([]*Patient, int64, error) {
+			assert.Equal(t, tenantID, gotTenantID)
+			assert.Equal(t, query, gotQuery)
+			assert.Equal(t, 10, offset)
+			assert.Equal(t, 5, limit)
+			return expected, int64(len(expected)), nil
+		},
+	}
+
+	svc := NewPatientService(mockRepo)
+	patients, total, err := svc.SearchPatients(context.Background(), tenantID, query, 10, 5)
+
+	require.NoError(t, err)
+	assert.Equal(t, expected, patients)
+	assert.Equal(t, int64(1), total)
+}
+
+func TestPatientServiceUpdateDemographics(t *testing.T) {
+	tenantID := uuid.New()
+	updatedBy := uuid.New()
+	patient := &Patient{ID: uuid.New(), TenantID: tenantID, MRN: "MRN-123", Name: "Old Name", Phone: "+911111111111", Email: "old@example.com", Status: PatientStatusActive}
+	address := &Address{Street: "123 Street", City: "Mumbai", State: "MH", PostalCode: "400001", Country: "IN"}
+	mockRepo := &MockPatientRepository{
+		getByMRNFunc: func(ctx context.Context, gotTenantID uuid.UUID, mrn string) (*Patient, error) {
+			assert.Equal(t, tenantID, gotTenantID)
+			assert.Equal(t, patient.MRN, mrn)
+			return patient, nil
+		},
+		updateFunc: func(ctx context.Context, updated *Patient) error {
+			assert.Equal(t, "New Name", updated.Name)
+			assert.Equal(t, "+922222222222", updated.Phone)
+			return nil
+		},
+	}
+
+	svc := NewPatientService(mockRepo)
+	updatedPatient, event, err := svc.UpdateDemographics(context.Background(), tenantID, patient.MRN, "New Name", "+922222222222", "new@example.com", address, updatedBy)
+
+	require.NoError(t, err)
+	require.NotNil(t, event)
+	assert.Equal(t, "New Name", updatedPatient.Name)
+	assert.ElementsMatch(t, []string{"name", "phone", "email", "address"}, event.ChangedFields)
+	assert.Equal(t, updatedBy, event.UpdatedBy)
+}

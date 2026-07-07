@@ -22,7 +22,7 @@ func main() {
 	// 1. Setup Database
 	connString := os.Getenv("DATABASE_URL")
 	if connString == "" {
-		connString = "postgres://user:password@localhost:5432/auth_db?sslmode=disable"
+		connString = "postgres://postgres:postgres@localhost:5432/auth_db?sslmode=disable"
 	}
 
 	db, err := postgres.NewDB(ctx, connString)

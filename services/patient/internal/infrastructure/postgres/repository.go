@@ -287,6 +287,25 @@ func fromDomainPatient(p *domain.Patient) *dbPatient {
 	return dbp
 }
 
+// insertAuditLog creates an audit log entry for patient mutations
+func (r *PatientRepository) insertAuditLog(ctx context.Context, log *domain.AuditLog) error {
+	query := `
+		INSERT INTO patient_audit_logs (id, patient_id, tenant_id, action, changed_fields, old_values, new_values, changed_by, correlation_id, changed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+	`
+
+	changedFields, _ := json.Marshal(log.ChangedFields)
+	oldValues, _ := json.Marshal(log.OldValues)
+	newValues, _ := json.Marshal(log.NewValues)
+
+	_, err := r.db.ExecContext(ctx, query,
+		log.ID, log.PatientID, log.TenantID, log.Action,
+		changedFields, oldValues, newValues,
+		log.ChangedBy, log.CorrelationID, log.ChangedAt,
+	)
+	return err
+}
+
 // Create inserts a new patient into the database
 func (r *PatientRepository) Create(ctx context.Context, patient *domain.Patient) error {
 	dbp := fromDomainPatient(patient)
@@ -335,6 +354,22 @@ func (r *PatientRepository) Create(ctx context.Context, patient *domain.Patient)
 			return domain.ErrAlreadyExists
 		}
 		return fmt.Errorf("create patient: %w", err)
+	}
+
+	auditLog := &domain.AuditLog{
+		ID:            uuid.New(),
+		PatientID:     patient.ID,
+		TenantID:      patient.TenantID,
+		Action:        "CREATE",
+		ChangedFields: []string{"all"},
+		OldValues:     nil,
+		NewValues:     nil,
+		ChangedBy:     patient.CreatedBy,
+		CorrelationID: "",
+		ChangedAt:     time.Now().UTC(),
+	}
+	if err := r.insertAuditLog(ctx, auditLog); err != nil {
+		return fmt.Errorf("create patient audit log: %w", err)
 	}
 
 	return nil
@@ -446,6 +481,22 @@ func (r *PatientRepository) Update(ctx context.Context, patient *domain.Patient)
 
 	if rows == 0 {
 		return domain.ErrNotFound
+	}
+
+	auditLog := &domain.AuditLog{
+		ID:            uuid.New(),
+		PatientID:     patient.ID,
+		TenantID:      patient.TenantID,
+		Action:        "UPDATE",
+		ChangedFields: []string{"demographics"},
+		OldValues:     nil,
+		NewValues:     nil,
+		ChangedBy:     patient.UpdatedBy,
+		CorrelationID: "",
+		ChangedAt:     time.Now().UTC(),
+	}
+	if err := r.insertAuditLog(ctx, auditLog); err != nil {
+		return fmt.Errorf("update patient audit log: %w", err)
 	}
 
 	return nil

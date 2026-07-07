@@ -91,26 +91,17 @@ func (e *PatientArchived) CorrelationID() string        { return e.CorrelID }
 // PatientActivated is published when a patient is activated.
 // Kafka topic: his.patient.patient.activated
 type PatientActivated struct {
-	PatientID       uuid.UUID
-	TenantID        uuid.UUID
-	MRN             string
-	Status          string
-	ActivatedBy     uuid.UUID
-	ActivatedAtTime time.Time
+	PatientID       uuid.UUID `json:"patient_id"`
+	TenantID        uuid.UUID `json:"tenant_id"`
+	MRN             string    `json:"mrn"`
+	Status          string    `json:"status"`
+	CorrelID        string    `json:"correlation_id"`
+	ActivatedBy     uuid.UUID `json:"activated_by"`
+	ActivatedAtTime time.Time `json:"activated_at"`
 }
 
-func (e *PatientActivated) EventType() string {
-	return "his.patient.patient.activated"
-}
-
-func (e *PatientActivated) Timestamp() time.Time {
-	return e.ActivatedAtTime
-}
-
-func (e *PatientActivated) AggregateID() uuid.UUID {
-	return e.PatientID
-}
-
-func (e *PatientActivated) AggregateTenantID() uuid.UUID {
-	return e.TenantID
-}
+func (e *PatientActivated) EventType() string            { return "his.patient.patient.activated" }
+func (e *PatientActivated) Timestamp() time.Time         { return e.ActivatedAtTime }
+func (e *PatientActivated) AggregateID() uuid.UUID       { return e.PatientID }
+func (e *PatientActivated) AggregateTenantID() uuid.UUID { return e.TenantID }
+func (e *PatientActivated) CorrelationID() string        { return e.CorrelID }

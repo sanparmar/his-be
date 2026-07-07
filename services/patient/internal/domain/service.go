@@ -41,6 +41,10 @@ func (s *PatientService) RegisterPatient(
 	ctx context.Context,
 	input RegisterPatientInput,
 ) (*Patient, *PatientRegistered, error) {
+	if err := validateRegistrationInput(input); err != nil {
+		return nil, nil, fmt.Errorf("register patient: %w", err)
+	}
+
 	// Create new patient aggregate
 	patient := NewPatient(
 		input.TenantID,
@@ -256,6 +260,40 @@ func (s *PatientService) RecordMedications(
 	}
 
 	return patient, nil
+}
+
+// validateRegistrationInput validates required fields for patient registration.
+func validateRegistrationInput(input RegisterPatientInput) error {
+	if input.TenantID == uuid.Nil {
+		return fmt.Errorf("%w: tenant_id is required", ErrInvalidInput)
+	}
+	if input.Name == "" {
+		return fmt.Errorf("%w: patient name is required", ErrInvalidInput)
+	}
+	if input.DOB.IsZero() {
+		return fmt.Errorf("%w: date of birth is required", ErrInvalidInput)
+	}
+	if input.Gender == "" {
+		return fmt.Errorf("%w: gender is required", ErrInvalidInput)
+	}
+	if input.Phone == "" {
+		return fmt.Errorf("%w: phone is required", ErrInvalidInput)
+	}
+	if input.BloodGroup == "" {
+		return fmt.Errorf("%w: blood group is required", ErrInvalidInput)
+	}
+	if input.EmergencyContact != nil {
+		if input.EmergencyContact.Name == "" {
+			return fmt.Errorf("%w: emergency contact name is required", ErrInvalidInput)
+		}
+		if input.EmergencyContact.Phone == "" {
+			return fmt.Errorf("%w: emergency contact phone is required", ErrInvalidInput)
+		}
+	}
+	if input.CreatedBy == uuid.Nil {
+		return fmt.Errorf("%w: created_by is required", ErrInvalidInput)
+	}
+	return nil
 }
 
 // RecordVitalSigns records vital measurements

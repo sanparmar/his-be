@@ -5,7 +5,7 @@ INSERT INTO users (
     id,
     username,
     email,
-    password_hash`,
+    password_hash,
     tenant_id,
     organization_id,
     hospital_id,

@@ -490,9 +490,41 @@ func (ps *PatientServer) ActivatePatient(ctx context.Context, req *patientv1.Act
 	ctx, span := tracer.Start(ctx, "PatientService.ActivatePatient")
 	defer span.End()
 
-	// TODO: Implement activation logic
-	span.SetStatus(otcodes.Error, "not implemented")
-	return nil, status.Error(codes.Unimplemented, "ActivatePatient not yet implemented")
+	if req.TenantId == "" || req.PatientId == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing required fields: patient_id, tenant_id")
+	}
+
+	tenantID, err := uuid.Parse(req.TenantId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid tenant_id")
+	}
+
+	q := query.GetPatientByMRNQuery{
+		TenantID: tenantID,
+		MRN:      req.PatientId,
+	}
+
+	patient, err := ps.getPatientByMRNHandler.Handle(ctx, &q)
+	if err != nil {
+		if err == domain.ErrNotFound {
+			return nil, status.Error(codes.NotFound, "patient not found")
+		}
+		span.RecordError(err)
+		return nil, status.Error(codes.Internal, "failed to get patient")
+	}
+
+	updatedBy := uuid.New()
+	if err := patient.TransitionStatus(domain.PatientStatusActive, updatedBy); err != nil {
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	}
+
+	span.SetAttributes(attribute.String("patient.id", patient.ID.String()))
+
+	resp := &patientv1.ActivatePatientResponse{
+		Patient: domainPatientToProto(patient),
+	}
+
+	return resp, nil
 }
 
 // Health implements PatientService.Health RPC

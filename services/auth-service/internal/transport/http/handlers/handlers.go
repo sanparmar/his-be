@@ -64,8 +64,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	// Token is usually extracted from header or cookie in a real app
-	token := r.Header.Get("Authorization")
+	rawToken := r.Header.Get("Authorization")
+	token := stripBearerPrefix(rawToken)
 	if token == "" {
 		http.Error(w, "missing token", http.StatusBadRequest)
 		return
@@ -80,14 +80,19 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func stripBearerPrefix(token string) string {
+	if len(token) > 7 && token[:7] == "Bearer " {
+		return token[7:]
+	}
+	return token
+}
+
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	// Token is usually extracted from context (populated by middleware)
 	// For this prototype, we assume the token is in the header and we extract it.
-	token := r.Header.Get("Authorization")
-	
-	// In a real app, we would use a middleware to validate the token and 
-	// put the user object into the request context.
-	
+	rawToken := r.Header.Get("Authorization")
+	token := stripBearerPrefix(rawToken)
+
 	resp, err := h.meUseCase.Execute(r.Context(), token)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)

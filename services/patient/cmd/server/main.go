@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -23,6 +24,8 @@ import (
 	grpcserver "github.com/deloitte-us-consulting/his-be/services/patient/internal/infrastructure/grpc"
 	"github.com/deloitte-us-consulting/his-be/services/patient/internal/infrastructure/kafka"
 	"github.com/deloitte-us-consulting/his-be/services/patient/internal/infrastructure/postgres"
+	httphandlers "github.com/deloitte-us-consulting/his-be/services/patient/internal/transport/http/handlers"
+	httproutes "github.com/deloitte-us-consulting/his-be/services/patient/internal/transport/http/router"
 	"github.com/deloitte-us-consulting/his-be/services/patient/pkg/config"
 	"github.com/deloitte-us-consulting/his-be/services/patient/pkg/logger"
 )
@@ -90,6 +93,20 @@ func main() {
 	searchPatientsHandler := query.NewSearchPatientsHandler(patientSvc)
 	listPatientsHandler := query.NewListPatientsHandler(patientSvc)
 
+	// Create HTTP handler and router (REST API)
+	patientHTTPHandler := httphandlers.NewPatientHandler(
+		createPatientHandler,
+		updateDemographicsHandler,
+		updateInsuranceHandler,
+		recordAllergiesHandler,
+		recordMedicationsHandler,
+		recordVitalSignsHandler,
+		getPatientByMRNHandler,
+		searchPatientsHandler,
+		listPatientsHandler,
+	)
+	httpRouter := httproutes.NewRouter(patientHTTPHandler)
+
 	// Create gRPC server
 	grpcSrv := grpc.NewServer()
 
@@ -109,7 +126,6 @@ func main() {
 
 	// Register patient service with gRPC
 	patientv1.RegisterPatientServiceServer(grpcSrv, patientServer)
-	_ = patientServer
 
 	// Register health check
 	healthServer := health.NewServer()
@@ -125,10 +141,24 @@ func main() {
 
 	logger.Info("gRPC server listening", logger.String("addr", fmt.Sprintf(":%d", cfg.Server.Port)))
 
-	// Start server in goroutine
+	// Start gRPC server in goroutine
 	go func() {
 		if err := grpcSrv.Serve(listener); err != nil && err.Error() != "http: Server closed" {
-			logger.Error("server error", err)
+			logger.Error("gRPC server error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Start HTTP server
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Server.HTTPPort),
+		Handler: httpRouter,
+	}
+
+	go func() {
+		logger.Info("HTTP server listening", logger.String("addr", fmt.Sprintf(":%d", cfg.Server.HTTPPort)))
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTP server error", err)
 			os.Exit(1)
 		}
 	}()
@@ -139,6 +169,12 @@ func main() {
 	<-sigChan
 
 	logger.Info("shutting down patient service")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	httpServer.Shutdown(shutdownCtx)
 	grpcSrv.GracefulStop()
+
 	logger.Info("patient service shutdown complete")
 }

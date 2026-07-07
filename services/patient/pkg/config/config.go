@@ -16,9 +16,10 @@ type Config struct {
 	Logging  LoggingConfig
 }
 
-// ServerConfig holds gRPC server configuration.
+// ServerConfig holds gRPC and HTTP server configuration.
 type ServerConfig struct {
 	Port            int
+	HTTPPort        int
 	HealthCheckPort int
 	GracefulTimeout int // seconds
 }
@@ -54,6 +55,7 @@ func Load() (*Config, error) {
 
 	// Set defaults
 	v.SetDefault("server.port", 50051)
+	v.SetDefault("server.httpPort", 8080)
 	v.SetDefault("server.healthCheckPort", 8081)
 	v.SetDefault("server.gracefulTimeout", 30)
 	v.SetDefault("database.host", "localhost")
@@ -67,6 +69,7 @@ func Load() (*Config, error) {
 
 	// Override with environment variables
 	_ = v.BindEnv("server.port", "GRPC_PORT")
+	_ = v.BindEnv("server.httpPort", "HTTP_PORT")
 	_ = v.BindEnv("database.host", "DB_HOST")
 	_ = v.BindEnv("database.port", "DB_PORT")
 	_ = v.BindEnv("database.user", "DB_USER")
@@ -78,6 +81,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
 			Port:            v.GetInt("server.port"),
+			HTTPPort:        v.GetInt("server.httpPort"),
 			HealthCheckPort: v.GetInt("server.healthCheckPort"),
 			GracefulTimeout: v.GetInt("server.gracefulTimeout"),
 		},

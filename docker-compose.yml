@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: his-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: his_patient
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: his-gateway
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:

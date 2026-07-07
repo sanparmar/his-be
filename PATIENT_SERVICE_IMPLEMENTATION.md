@@ -11,27 +11,30 @@ services/patient/                          [COMPLETE - 100%]
 ├── internal/
 │   ├── domain/                           [✓] Pure business logic
 │   │   ├── entity.go                     [✓] Patient aggregate root + methods
-│   │   ├── service.go                    [✓] Domain business logic (5 operations)
+│   │   ├── service.go                    [✓] Domain business logic (8 operations + input validation)
 │   │   ├── repository.go                 [✓] Repository interface (port)
 │   │   ├── event_publisher.go            [✓] Event publisher interface (port)
-│   │   ├── events.go                     [✓] PatientRegistered, Updated, Activated
+│   │   ├── events.go                     [✓] PatientRegistered, Updated, Activated, Archived
 │   │   ├── errors.go                     [✓] Sentinel errors
 │   │   ├── entity_test.go                [✓] Entity tests (NewPatient, status transitions)
 │   │   └── service_test.go               [✓] Domain service tests (mocked repo)
 │   │
 │   ├── application/                      [✓] CQRS handlers
 │   │   ├── command/
-│   │   │   └── commands.go               [✓] CreatePatient, UpdatePatient, ActivatePatient
+│   │   │   └── commands.go               [✓] CreatePatient, UpdateDemographics, UpdateInsurance,
+│   │   │                                     RecordAllergies, RecordMedications, RecordVitalSigns
 │   │   └── query/
-│   │       └── queries.go                [✓] GetPatient, SearchPatients, ListPatients
+│   │       └── queries.go                [✓] GetPatientByMRN, SearchPatients, ListPatients
 │   │
 │   └── infrastructure/                   [✓] Implementations (adapters)
 │       ├── postgres/
-│       │   └── repository.go             [✓] sqlx-based repository (Create, Get, Search, List, Update)
+│       │   └── repository.go             [✓] sqlx-based repository (CRUD + audit log insertion)
 │       ├── kafka/
 │       │   └── publisher.go              [✓] Kafka event publisher (uses segmentio/kafka-go)
 │       └── grpc/
-│           └── server.go                 [✓] gRPC handlers with JWT, RBAC, OTel, audit
+│           ├── server.go                 [✓] gRPC server constructor with DI wiring
+│           ├── handlers.go               [✓] All 7 gRPC RPC implementations (auth, RBAC, OTel)
+│           └── handlers_test.go          [✓] Handler tests (domain-to-proto conversion)
 │
 ├── pkg/
 │   ├── config/
@@ -84,12 +87,14 @@ services/patient/                          [COMPLETE - 100%]
 
 ### Step 3: Domain Layer ✅
 - `entity.go`: Patient aggregate (13 fields + 6 methods)
-- `service.go`: PatientService (6 operations)
-- `repository.go`: Repository interface (5 methods)
-- `event_publisher.go`: EventPublisher interface
-- `events.go`: PatientRegistered, PatientUpdated, PatientActivated
-- `errors.go`: Sentinel errors (ErrNotFound, ErrAlreadyExists, etc.)
-- **Gate**: PASS - Zero external imports, pure domain logic
+- `service.go`: PatientService (8 operations) with `validateRegistrationInput` for pre-flight field validation
+- `repository.go`: Repository interface (6 methods including GetAuditLog)
+- `event_publisher.go`: EventPublisher interface (port)
+- `events.go`: PatientRegistered, PatientUpdated, PatientActivated, PatientArchived
+  - All events implement `DomainEvent` interface (EventType, Timestamp, AggregateID, AggregateTenantID, CorrelationID)
+  - Fixed: PatientActivated now implements CorrelationID()
+- `errors.go`: Sentinel errors (ErrNotFound, ErrAlreadyExists, ErrInvalidInput, ErrUnauthorized, ErrTenantMismatch)
+- **Gate**: PASS - Zero external imports, pure domain logic, input validation gate on registration
 
 ### Step 4: Application Layer ✅
 - `command/commands.go`: 3 CQRS handlers (Create, Update, Activate)
@@ -99,14 +104,18 @@ services/patient/                          [COMPLETE - 100%]
 
 ### Step 5: Infrastructure Layer ✅
 - `postgres/repository.go`: sqlx-based repository with dynamic query building
+  - Audit log insertion on CREATE and UPDATE mutations
+  - Full patient-to-domain and domain-to-patient mapping (47 columns)
 - `kafka/publisher.go`: Segmentio Kafka writer with proper headers
-- `grpc/server.go`: gRPC handlers with:
-  - JWT auth extraction
-  - Tenant isolation checks
-  - OTel tracing (span creation, error recording)
-  - Request/response conversion
-  - Error handling (gRPC error codes)
-- **Gate**: PASS - All interfaces implemented exactly
+- `grpc/server.go` + `handlers.go`: gRPC handlers with:
+  - JWT auth extraction (from authorization/x-user-id metadata)
+  - Tenant isolation checks on every query
+  - OTel tracing (span creation, error recording, attribute injection)
+  - Request/response conversion (proto ↔ domain)
+  - Input validation before command dispatch
+  - Full 7/7 RPC implementations (was 0/7 — all were stubs)
+  - Error handling (gRPC error codes with domain error mapping)
+- **Gate**: PASS - All interfaces implemented exactly, handlers_test.go covers domain-to-proto conversion
 
 ### Step 6: Entry Point & Config ✅
 - `cmd/server/main.go`: DI wiring, DB/Kafka init, graceful shutdown

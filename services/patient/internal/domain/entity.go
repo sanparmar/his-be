@@ -34,6 +34,42 @@ const (
 	BloodGroupUnknown   BloodGroup = "UNKNOWN"
 )
 
+func ParseGender(s string) (Gender, error) {
+	switch s {
+	case "MALE":
+		return GenderMale, nil
+	case "FEMALE":
+		return GenderFemale, nil
+	case "OTHER":
+		return GenderOther, nil
+	default:
+		return GenderUnknown, fmt.Errorf("unknown gender: %s", s)
+	}
+}
+
+func ParseBloodGroup(s string) (BloodGroup, error) {
+	switch s {
+	case "A+":
+		return BloodGroupAPlusPlus, nil
+	case "A-":
+		return BloodGroupAMinus, nil
+	case "B+":
+		return BloodGroupBPlus, nil
+	case "B-":
+		return BloodGroupBMinus, nil
+	case "AB+":
+		return BloodGroupABPlus, nil
+	case "AB-":
+		return BloodGroupABMinus, nil
+	case "O+":
+		return BloodGroupOPlus, nil
+	case "O-":
+		return BloodGroupOMinus, nil
+	default:
+		return BloodGroupUnknown, fmt.Errorf("unknown blood group: %s", s)
+	}
+}
+
 // PatientStatus represents patient lifecycle state
 type PatientStatus string
 

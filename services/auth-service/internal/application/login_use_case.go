@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/his-platform/auth-service/internal/domain"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type LoginUseCase struct {
@@ -32,8 +31,7 @@ func (uc *LoginUseCase) Execute(ctx context.Context, username, password string) 
 		return nil, domain.ErrUserNotFound
 	}
 
-	// Verify password with bcrypt
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if err := domain.VerifyPassword(user.PasswordHash, password); err != nil {
 		return nil, domain.ErrInvalidCredentials
 	}
 

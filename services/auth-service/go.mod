@@ -17,3 +17,8 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
+
+require (
+    google.golang.org/grpc v1.64.0
+    google.golang.org/protobuf v1.34.0
+)

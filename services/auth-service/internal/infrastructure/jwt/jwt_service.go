@@ -18,11 +18,14 @@ var (
 
 type CustomClaims struct {
 	jwt.RegisteredClaims
-	UserID       uuid.UUID `json:"uid"`
-	TenantID     uuid.UUID `json:"tid"`
+	UserID         uuid.UUID `json:"uid"`
+	TenantID       uuid.UUID `json:"tid"`
 	OrganizationID uuid.UUID `json:"oid"`
-	HospitalID   uuid.UUID `json:"hid"`
-	Username     string    `json:"sub_name"`
+	HospitalID     uuid.UUID `json:"hid"`
+	Username       string    `json:"sub_name"`
+	Roles          []string  `json:"roles,omitempty"`
+	Permissions    []string  `json:"perms,omitempty"`
+	PermVersion    int64     `json:"pv,omitempty"`
 }
 
 type JWTService struct {
@@ -37,10 +40,9 @@ func NewJWTService(accessSecret, refreshSecret string) *JWTService {
 	}
 }
 
-func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User) (*domain.TokenPair, error) {
+func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, roles []string, permissions []string, permVersion int64) (*domain.TokenPair, error) {
 	now := time.Now()
 
-	// Access Token
 	accessClaims := CustomClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
@@ -52,6 +54,9 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User) (
 		OrganizationID: user.OrganizationID,
 		HospitalID:     user.HospitalID,
 		Username:       user.Username,
+		Roles:          roles,
+		Permissions:    permissions,
+		PermVersion:    permVersion,
 	}
 
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(s.accessSecret)
@@ -59,7 +64,6 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User) (
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	// Refresh Token
 	refreshClaims := jwt.RegisteredClaims{
 		Subject:   user.ID.String(),
 		ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
@@ -104,6 +108,9 @@ func (s *JWTService) ValidateAccessToken(ctx context.Context, tokenStr string) (
 		TenantID:       claims.TenantID,
 		OrganizationID: claims.OrganizationID,
 		HospitalID:     claims.HospitalID,
+		Roles:          claims.Roles,
+		Permissions:    claims.Permissions,
+		PermVersion:    claims.PermVersion,
 	}, nil
 }
 

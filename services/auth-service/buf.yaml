@@ -1,0 +1,31 @@
+version: v2
+name: his-platform/auth-service
+deps:
+  - buf.build/googleapis/googleapis
+  - buf.build/grpc-ecosystem/grpc-gateway
+  - buf.build/connectrpc/eliza
+
+lint:
+  use:
+    - DEFAULT
+  except:
+    - FIELD_NOT_REQUIRED
+    - PACKAGE_VERSION_SUFFIX
+    - PACKAGE_AFFINITY
+    - RPC_ALLOW_GET_HTTP_BODY
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_RESPONSE_STANDARD_NAME
+    - SERVICE_SUFFIX
+
+breaking:
+  use:
+    - FILE
+  except:
+    - EXTENSION_RANGE
+    - FIELD_SAME_DEFAULT
+    - FIELD_SAME_JSON_NAME
+    - ONEOF_FIELD_SAME_JSON_NAME
+
+build:
+  roots:
+    - proto

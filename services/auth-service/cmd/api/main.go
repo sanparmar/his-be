@@ -8,11 +8,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/his-platform/auth-service/internal/application"
-	"github.com/his-platform/auth-service/internal/infrastructure/jwt"
-	"github.com/his-platform/auth-service/internal/infrastructure/postgres"
-	"github.com/his-platform/auth-service/internal/transport/http/handlers"
-	"github.com/his-platform/auth-service/internal/transport/http/router"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/http/handlers"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/http/router"
 )
 
 func main() {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 )
 
 var (

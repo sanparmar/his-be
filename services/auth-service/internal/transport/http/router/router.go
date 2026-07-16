@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/his-platform/auth-service/internal/transport/http/handlers"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/http/handlers"
 )
 
 func NewRouter(h *handlers.AuthHandler) *mux.Router {

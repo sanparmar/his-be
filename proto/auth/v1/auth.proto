@@ -2,38 +2,90 @@ syntax = "proto3";
 
 package auth.v1;
 
-option go_package = "github.com/his-platform/auth-service/api/auth/v1";
+option go_package = "github.com/deloitte-us-consulting/his-be/api/auth/v1";
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
 
 service AuthService {
   // 1. Exchange credentials for JWT/Refresh token
-  rpc AuthenticateCredentials(AuthenticateCredentialsRequest) returns (AuthenticateCredentialsResponse);
+  rpc AuthenticateCredentials(AuthenticateCredentialsRequest) returns (AuthenticateCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login"
+      body: "*"
+    };
+  };
   
   // 2. Used by Gateway/Router to verify token state
-  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse);
+  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/validate"
+      body: "*"
+    };
+  };
   
   // 3. Silent token rotation
-  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse);
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/refresh"
+      body: "*"
+    };
+  };
   
   // 4. Forced logout, immediate invalidation
-  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse);
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/revoke"
+      body: "*"
+    };
+  };
   
   // 5. Creates the base UUID and credential record
-  rpc ProvisionIdentity(ProvisionIdentityRequest) returns (ProvisionIdentityResponse);
+  rpc ProvisionIdentity(ProvisionIdentityRequest) returns (ProvisionIdentityResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/provision"
+      body: "*"
+    };
+  };
   
   // 6. Password changes, MFA enrolment
-  rpc UpdateCredentials(UpdateCredentialsRequest) returns (UpdateCredentialsResponse);
+  rpc UpdateCredentials(UpdateCredentialsRequest) returns (UpdateCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/credentials"
+      body: "*"
+    };
+  };
   
   // 7. RBAC mapping to UUIDs
-  rpc AssignRoles(AssignRolesRequest) returns (AssignRolesResponse);
+  rpc AssignRoles(AssignRolesRequest) returns (AssignRolesResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/roles"
+      body: "*"
+    };
+  };
   
   // 8. TOTP/WebAuthn verification
-  rpc VerifyMFAChallenge(VerifyMFAChallengeRequest) returns (VerifyMFAChallengeResponse);
+  rpc VerifyMFAChallenge(VerifyMFAChallengeRequest) returns (VerifyMFAChallengeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/mfa/verify"
+      body: "*"
+    };
+  };
   
   // 9. Returns the flattened permission tree for a user
-  rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse);
+  rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse) {
+    option (google.api.http) = {
+      get: "/v1/auth/permissions/{user_id}"
+    };
+  };
+
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {
+    option (google.api.http) = {
+      get: "/healthz"
+    };
+  };
 }
 
 // ===== Messages =====
@@ -159,4 +211,9 @@ message UserRole {
   string role_id = 1;
   string name = 2;
   string tenant_id = 3;
+}
+
+message HealthCheckResponse {
+  string status  = 1; // "ok" | "degraded"
+  string version = 2;
 }

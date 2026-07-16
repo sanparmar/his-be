@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/his-platform/auth-service/internal/application"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
 )
 
 type AuthHandler struct {

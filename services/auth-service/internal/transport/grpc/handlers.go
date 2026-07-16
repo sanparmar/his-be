@@ -12,6 +12,7 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/validation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -66,8 +67,14 @@ func NewAuthService(
 
 // 1. AuthenticateCredentials - Exchange credentials for JWT/Refresh token
 func (s *AuthService) AuthenticateCredentials(ctx context.Context, req *authv1.AuthenticateCredentialsRequest) (*authv1.AuthenticateCredentialsResponse, error) {
-	if req.Username == "" || req.Password == "" {
-		return nil, status.Error(codes.InvalidArgument, "username and password are required")
+	if err := validation.ValidateUsername(req.Username); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidatePassword(req.Password); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateOptionalUUID(req.TenantId, "tenant_id"); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	tokenPair, err := s.loginUseCase.Execute(ctx, req.Username, req.Password)
@@ -199,8 +206,23 @@ func (s *AuthService) RevokeSession(ctx context.Context, req *authv1.RevokeSessi
 
 // 5. ProvisionIdentity - Creates the base UUID and credential record
 func (s *AuthService) ProvisionIdentity(ctx context.Context, req *authv1.ProvisionIdentityRequest) (*authv1.ProvisionIdentityResponse, error) {
-	if req.Username == "" || req.Email == "" || req.Password == "" || req.TenantId == "" {
-		return nil, status.Error(codes.InvalidArgument, "username, email, password, and tenant_id are required")
+	if err := validation.ValidateUsername(req.Username); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateEmail(req.Email); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidatePassword(req.Password); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateUUID(req.TenantId, "tenant_id"); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateOptionalUUID(req.OrganizationId, "organization_id"); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateOptionalUUID(req.HospitalId, "hospital_id"); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	tenantID, err := uuid.Parse(req.TenantId)
@@ -246,8 +268,17 @@ func (s *AuthService) ProvisionIdentity(ctx context.Context, req *authv1.Provisi
 
 // 6. UpdateCredentials - Password changes, MFA enrolment
 func (s *AuthService) UpdateCredentials(ctx context.Context, req *authv1.UpdateCredentialsRequest) (*authv1.UpdateCredentialsResponse, error) {
-	if req.UserId == "" || req.CurrentPassword == "" || req.NewPassword == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id, current_password, and new_password are required")
+	if err := validation.ValidateUUID(req.UserId, "user_id"); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if req.CurrentPassword == "" {
+		return nil, status.Error(codes.InvalidArgument, "current_password is required")
+	}
+	if err := validation.ValidatePassword(req.NewPassword); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateMFAType(req.MfaType); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	userID, err := uuid.Parse(req.UserId)
@@ -279,8 +310,14 @@ func (s *AuthService) UpdateCredentials(ctx context.Context, req *authv1.UpdateC
 
 // 7. AssignRoles - RBAC mapping to UUIDs
 func (s *AuthService) AssignRoles(ctx context.Context, req *authv1.AssignRolesRequest) (*authv1.AssignRolesResponse, error) {
-	if req.UserId == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	if err := validation.ValidateUUID(req.UserId, "user_id"); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateRoleIDs(req.RoleIds); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := validation.ValidateRoleIDs(req.RemoveRoleIds); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	userID, err := uuid.Parse(req.UserId)

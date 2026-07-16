@@ -11,6 +11,7 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -26,6 +27,7 @@ type AuthService struct {
 	userRepo        *postgres.UserRepository
 	sessionRepo     *postgres.SessionRepository
 	jwtService      *jwt.JWTService
+	revocationStore *redis.TokenRevocationStore
 }
 
 func NewAuthService(
@@ -36,15 +38,17 @@ func NewAuthService(
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
 	jwtService *jwt.JWTService,
+	revocationStore *redis.TokenRevocationStore,
 ) *AuthService {
 	return &AuthService{
-		loginUseCase:   loginUseCase,
-		refreshUseCase: refreshUseCase,
-		logoutUseCase:  logoutUseCase,
-		meUseCase:      meUseCase,
-		userRepo:       userRepo,
-		sessionRepo:    sessionRepo,
-		jwtService:     jwtService,
+		loginUseCase:    loginUseCase,
+		refreshUseCase:  refreshUseCase,
+		logoutUseCase:   logoutUseCase,
+		meUseCase:       meUseCase,
+		userRepo:        userRepo,
+		sessionRepo:     sessionRepo,
+		jwtService:      jwtService,
+		revocationStore: revocationStore,
 	}
 }
 
@@ -83,7 +87,18 @@ func (s *AuthService) ValidateSession(ctx context.Context, req *authv1.ValidateS
 		return nil, status.Error(codes.InvalidArgument, "access token is required")
 	}
 
-	user, err := s.jwtService.ValidateAccessToken(ctx, req.AccessToken)
+	// Check if token is revoked
+	if s.revocationStore != nil {
+		revoked, err := s.revocationStore.IsRevoked(ctx, req.AccessToken)
+		if err != nil {
+			return nil, status.Error(codes.Internal, "failed to check token revocation")
+		}
+		if revoked {
+			return &authv1.ValidateSessionResponse{Valid: false}, nil
+		}
+	}
+
+	tokenUser, err := s.jwtService.ValidateAccessToken(ctx, req.AccessToken)
 	if err != nil {
 		if err == jwt.ErrExpiredToken {
 			return &authv1.ValidateSessionResponse{Valid: false}, nil
@@ -100,10 +115,13 @@ func (s *AuthService) ValidateSession(ctx context.Context, req *authv1.ValidateS
 		return &authv1.ValidateSessionResponse{Valid: false}, nil
 	}
 
-	// Get user roles/permissions
-	user, err = s.userRepo.GetByID(ctx, user.ID)
+	// Get full user from database
+	user, err := s.userRepo.GetByID(ctx, tokenUser.ID)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to get user")
+	}
+	if user == nil {
+		return &authv1.ValidateSessionResponse{Valid: false}, nil
 	}
 
 	permissions := s.getUserPermissions(user)
@@ -148,6 +166,20 @@ func (s *AuthService) RevokeSession(ctx context.Context, req *authv1.RevokeSessi
 	err := s.logoutUseCase.Execute(ctx, tokenToRevoke)
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to revoke session")
+	}
+
+	// Add to revocation list in Redis
+	if s.revocationStore != nil {
+		// Add refresh token to revocation list with 7 day TTL (same as refresh token expiry)
+		if req.RefreshToken != "" {
+			expiresAt := time.Now().Add(7 * 24 * time.Hour)
+			_ = s.revocationStore.AddRefreshTokenToRevocationList(ctx, req.RefreshToken, expiresAt)
+		}
+		// Add access token to revocation list with 15 min TTL (same as access token expiry)
+		if req.AccessToken != "" {
+			expiresAt := time.Now().Add(15 * time.Minute)
+			_ = s.revocationStore.AddAccessTokenToRevocationList(ctx, req.AccessToken, expiresAt)
+		}
 	}
 
 	return &authv1.RevokeSessionResponse{Success: true}, nil

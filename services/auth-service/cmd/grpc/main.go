@@ -13,6 +13,7 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	grpcsvc "github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc/interceptors"
 	"go.uber.org/zap"
@@ -56,6 +57,18 @@ func main() {
 		getEnv("JWT_REFRESH_SECRET", "refresh-secret-key"),
 	)
 
+	// Redis Client (for token revocation)
+	redisAddr := getEnv("REDIS_ADDR", "localhost:6379")
+	redisClient, err := redis.NewClient(redisAddr)
+	if err != nil {
+		logger.Warn("failed to connect to Redis, token revocation will not work", zap.Error(err))
+	}
+	var revocationStore *redis.TokenRevocationStore
+	if redisClient != nil {
+		revocationStore = redis.NewTokenRevocationStore(redisClient.Client)
+		defer redisClient.Close()
+	}
+
 	// Repositories
 	userRepo := postgres.NewUserRepository(db)
 	sessionRepo := postgres.NewSessionRepository(db)
@@ -94,6 +107,7 @@ func main() {
 		userRepo,
 		sessionRepo,
 		jwtService,
+		revocationStore,
 	)
 
 	// Register services

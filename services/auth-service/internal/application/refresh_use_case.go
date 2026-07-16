@@ -2,7 +2,9 @@ package application
 
 import (
 	"context"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 )
 
@@ -29,8 +31,27 @@ func (uc *RefreshUseCase) Execute(ctx context.Context, refreshToken string) (*do
 		return nil, err
 	}
 
-	// Update session or create new one
-	// ...
+	// Token rotation: delete old session and create new one with new refresh token
+	oldSession, err := uc.sessionRepo.GetByToken(ctx, refreshToken)
+	if err != nil {
+		return nil, err
+	}
+	if oldSession != nil {
+		if err := uc.sessionRepo.Delete(ctx, refreshToken); err != nil {
+			return nil, err
+		}
+	}
+
+	newSession := &domain.Session{
+		ID:        uuid.New(),
+		UserID:    user.ID,
+		Token:     tokenPair.RefreshToken,
+		ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
+	}
+
+	if err := uc.sessionRepo.Create(ctx, newSession); err != nil {
+		return nil, err
+	}
 
 	return tokenPair, nil
 }

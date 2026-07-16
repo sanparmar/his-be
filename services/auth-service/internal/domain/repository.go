@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -18,4 +19,5 @@ type SessionRepository interface {
 	GetByToken(ctx context.Context, token string) (*Session, error)
 	Delete(ctx context.Context, token string) error
 	UpdateLastActivity(ctx context.Context, token string) error
+	UpdateToken(ctx context.Context, oldToken, newToken string, expiresAt time.Time) error
 }

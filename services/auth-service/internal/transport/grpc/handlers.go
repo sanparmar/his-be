@@ -20,10 +20,11 @@ import (
 type AuthService struct {
 	authv1.UnimplementedAuthServiceServer
 
-	loginUseCase    *application.LoginUseCase
-	refreshUseCase  *application.RefreshUseCase
-	logoutUseCase   *application.LogoutUseCase
-	meUseCase       *application.MeUseCase
+	loginUseCase          *application.LoginUseCase
+	refreshUseCase        *application.RefreshUseCase
+	logoutUseCase         *application.LogoutUseCase
+	meUseCase             *application.MeUseCase
+	provisionIdentityUseCase *application.ProvisionIdentityUseCase
 	userRepo        *postgres.UserRepository
 	sessionRepo     *postgres.SessionRepository
 	jwtService      *jwt.JWTService
@@ -35,16 +36,18 @@ func NewAuthService(
 	refreshUseCase *application.RefreshUseCase,
 	logoutUseCase *application.LogoutUseCase,
 	meUseCase *application.MeUseCase,
+	provisionIdentityUseCase *application.ProvisionIdentityUseCase,
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
 	jwtService *jwt.JWTService,
 	revocationStore *redis.TokenRevocationStore,
 ) *AuthService {
 	return &AuthService{
-		loginUseCase:    loginUseCase,
-		refreshUseCase:  refreshUseCase,
-		logoutUseCase:   logoutUseCase,
-		meUseCase:       meUseCase,
+		loginUseCase:          loginUseCase,
+		refreshUseCase:        refreshUseCase,
+		logoutUseCase:         logoutUseCase,
+		meUseCase:             meUseCase,
+		provisionIdentityUseCase: provisionIdentityUseCase,
 		userRepo:        userRepo,
 		sessionRepo:     sessionRepo,
 		jwtService:      jwtService,
@@ -212,41 +215,16 @@ func (s *AuthService) ProvisionIdentity(ctx context.Context, req *authv1.Provisi
 		}
 	}
 
-	// Hash password
-	passwordHash, err := domain.HashPassword(req.Password)
+	tokenPair, user, err := s.provisionIdentityUseCase.Execute(ctx, req.Username, req.Email, req.Password, tenantID, orgID, hospitalID)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to hash password")
-	}
-
-	user := &domain.User{
-		Username:       req.Username,
-		Email:          req.Email,
-		PasswordHash:   passwordHash,
-		TenantID:       tenantID,
-		OrganizationID: orgID,
-		HospitalID:     hospitalID,
-	}
-
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		return nil, status.Error(codes.Internal, "failed to create user")
-	}
-
-	// Generate initial token pair
-	tokenPair, err := s.jwtService.GenerateTokenPair(ctx, user)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to generate tokens")
-	}
-
-	// Create session
-	session := &domain.Session{
-		ID:        uuid.New(),
-		UserID:    user.ID,
-		Token:     tokenPair.RefreshToken,
-		ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
-	}
-
-	if err := s.sessionRepo.Create(ctx, session); err != nil {
-		return nil, status.Error(codes.Internal, "failed to create session")
+		switch err {
+		case domain.ErrUserAlreadyExists:
+			return nil, status.Error(codes.AlreadyExists, "username already exists")
+		case domain.ErrEmailAlreadyExists:
+			return nil, status.Error(codes.AlreadyExists, "email already exists")
+		default:
+			return nil, status.Error(codes.Internal, "failed to provision identity")
+		}
 	}
 
 	return &authv1.ProvisionIdentityResponse{

@@ -73,6 +73,26 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 	return &user, nil
 }
 
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	query := `
+		SELECT id, username, email, password_hash, tenant_id, organization_id, hospital_id, created_at, updated_at
+		FROM users WHERE email = $1
+	`
+	var user domain.User
+	err := r.db.Pool.QueryRow(ctx, query, email).Scan(
+		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+		&user.TenantID, &user.OrganizationID, &user.HospitalID,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get user by email: %w", err)
+	}
+	return &user, nil
+}
+
 func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users 

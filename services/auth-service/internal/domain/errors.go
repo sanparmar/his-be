@@ -9,4 +9,6 @@ var (
 	ErrSessionExpired     = errors.New("session expired")
 	ErrInvalidSession     = errors.New("invalid session")
 	ErrInternal           = errors.New("internal server error")
+	ErrUserAlreadyExists  = errors.New("user already exists")
+	ErrEmailAlreadyExists = errors.New("email already exists")
 )

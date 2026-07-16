@@ -78,6 +78,7 @@ func main() {
 	refreshUseCase := application.NewRefreshUseCase(sessionRepo, jwtService)
 	logoutUseCase := application.NewLogoutUseCase(sessionRepo)
 	meUseCase := application.NewMeUseCase(jwtService)
+	provisionIdentityUseCase := application.NewProvisionIdentityUseCase(userRepo, sessionRepo, jwtService)
 
 	// Auth validator for interceptor
 	authValidator := grpcsvc.NewAuthValidatorImpl(jwtService, sessionRepo)
@@ -104,6 +105,7 @@ func main() {
 		refreshUseCase,
 		logoutUseCase,
 		meUseCase,
+		provisionIdentityUseCase,
 		userRepo,
 		sessionRepo,
 		jwtService,

@@ -72,6 +72,9 @@ func main() {
 	// Repositories
 	userRepo := postgres.NewUserRepository(db)
 	sessionRepo := postgres.NewSessionRepository(db)
+	mfaRepo := postgres.NewMFARepository(db)
+	roleRepo := postgres.NewRoleRepository(db)
+	userRoleRepo := postgres.NewUserRoleRepository(db)
 
 	// Use Cases
 	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService)
@@ -79,6 +82,8 @@ func main() {
 	logoutUseCase := application.NewLogoutUseCase(sessionRepo)
 	meUseCase := application.NewMeUseCase(jwtService)
 	provisionIdentityUseCase := application.NewProvisionIdentityUseCase(userRepo, sessionRepo, jwtService)
+	updateCredentialsUseCase := application.NewUpdateCredentialsUseCase(userRepo, sessionRepo, mfaRepo, jwtService)
+	assignRolesUseCase := application.NewAssignRolesUseCase(userRepo, roleRepo, userRoleRepo)
 
 	// Auth validator for interceptor
 	authValidator := grpcsvc.NewAuthValidatorImpl(jwtService, sessionRepo)
@@ -106,8 +111,11 @@ func main() {
 		logoutUseCase,
 		meUseCase,
 		provisionIdentityUseCase,
+		updateCredentialsUseCase,
+		assignRolesUseCase,
 		userRepo,
 		sessionRepo,
+		roleRepo,
 		jwtService,
 		revocationStore,
 	)

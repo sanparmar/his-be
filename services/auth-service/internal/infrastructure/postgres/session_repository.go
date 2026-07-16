@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -74,6 +75,15 @@ func (r *SessionRepository) UpdateToken(ctx context.Context, oldToken, newToken 
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("session not found")
+	}
+	return nil
+}
+
+func (r *SessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error {
+	query := `DELETE FROM sessions WHERE user_id = $1`
+	_, err := r.db.Pool.Exec(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete sessions by user ID: %w", err)
 	}
 	return nil
 }

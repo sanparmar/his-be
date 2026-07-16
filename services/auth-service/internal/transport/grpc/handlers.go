@@ -20,13 +20,16 @@ import (
 type AuthService struct {
 	authv1.UnimplementedAuthServiceServer
 
-	loginUseCase          *application.LoginUseCase
-	refreshUseCase        *application.RefreshUseCase
-	logoutUseCase         *application.LogoutUseCase
-	meUseCase             *application.MeUseCase
+	loginUseCase            *application.LoginUseCase
+	refreshUseCase          *application.RefreshUseCase
+	logoutUseCase           *application.LogoutUseCase
+	meUseCase               *application.MeUseCase
 	provisionIdentityUseCase *application.ProvisionIdentityUseCase
+	updateCredentialsUseCase *application.UpdateCredentialsUseCase
+	assignRolesUseCase       *application.AssignRolesUseCase
 	userRepo        *postgres.UserRepository
 	sessionRepo     *postgres.SessionRepository
+	roleRepo        *postgres.RoleRepository
 	jwtService      *jwt.JWTService
 	revocationStore *redis.TokenRevocationStore
 }
@@ -37,19 +40,25 @@ func NewAuthService(
 	logoutUseCase *application.LogoutUseCase,
 	meUseCase *application.MeUseCase,
 	provisionIdentityUseCase *application.ProvisionIdentityUseCase,
+	updateCredentialsUseCase *application.UpdateCredentialsUseCase,
+	assignRolesUseCase *application.AssignRolesUseCase,
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
+	roleRepo *postgres.RoleRepository,
 	jwtService *jwt.JWTService,
 	revocationStore *redis.TokenRevocationStore,
 ) *AuthService {
 	return &AuthService{
-		loginUseCase:          loginUseCase,
-		refreshUseCase:        refreshUseCase,
-		logoutUseCase:         logoutUseCase,
-		meUseCase:             meUseCase,
+		loginUseCase:            loginUseCase,
+		refreshUseCase:          refreshUseCase,
+		logoutUseCase:           logoutUseCase,
+		meUseCase:               meUseCase,
 		provisionIdentityUseCase: provisionIdentityUseCase,
+		updateCredentialsUseCase: updateCredentialsUseCase,
+		assignRolesUseCase:       assignRolesUseCase,
 		userRepo:        userRepo,
 		sessionRepo:     sessionRepo,
+		roleRepo:        roleRepo,
 		jwtService:      jwtService,
 		revocationStore: revocationStore,
 	}
@@ -246,40 +255,26 @@ func (s *AuthService) UpdateCredentials(ctx context.Context, req *authv1.UpdateC
 		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
 	}
 
-	user, err := s.userRepo.GetByID(ctx, userID)
+	result, err := s.updateCredentialsUseCase.Execute(ctx, userID, req.CurrentPassword, req.NewPassword, req.EnableMfa, req.MfaType)
 	if err != nil {
-		return nil, status.Error(codes.NotFound, "user not found")
-	}
-	if user == nil {
-		return nil, status.Error(codes.NotFound, "user not found")
-	}
-
-	// Verify current password
-	if err := domain.VerifyPassword(user.PasswordHash, req.CurrentPassword); err != nil {
-		return nil, status.Error(codes.Unauthenticated, "current password is incorrect")
-	}
-
-	// Hash new password
-	newHash, err := domain.HashPassword(req.NewPassword)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to hash new password")
+		switch err {
+		case domain.ErrUserNotFound:
+			return nil, status.Error(codes.NotFound, "user not found")
+		case domain.ErrInvalidCredentials:
+			return nil, status.Error(codes.Unauthenticated, "current password is incorrect")
+		case domain.ErrMFAAlreadyEnabled:
+			return nil, status.Error(codes.AlreadyExists, "MFA already enabled")
+		default:
+			return nil, status.Error(codes.Internal, "failed to update credentials")
+		}
 	}
 
-	user.PasswordHash = newHash
-	if err := s.userRepo.Update(ctx, user); err != nil {
-		return nil, status.Error(codes.Internal, "failed to update password")
-	}
-
-	// Revoke all existing sessions for this user (force re-login)
-	// TODO: Implement session revocation by user ID
-
-	response := &authv1.UpdateCredentialsResponse{
-		Success: true,
-	}
-
-	// TODO: Handle MFA enrolment if req.EnableMfa is true
-
-	return response, nil
+	return &authv1.UpdateCredentialsResponse{
+		Success:      result.Success,
+		MfaSecret:    result.MFASecret,
+		MfaQrCode:    result.MFAQRCode,
+		BackupCodes:  result.BackupCodes,
+	}, nil
 }
 
 // 7. AssignRoles - RBAC mapping to UUIDs
@@ -293,21 +288,47 @@ func (s *AuthService) AssignRoles(ctx context.Context, req *authv1.AssignRolesRe
 		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
 	}
 
-	user, err := s.userRepo.GetByID(ctx, userID)
-	if err != nil {
-		return nil, status.Error(codes.NotFound, "user not found")
+	var addRoleIDs, removeRoleIDs []uuid.UUID
+	for _, id := range req.RoleIds {
+		if parsed, err := uuid.Parse(id); err == nil {
+			addRoleIDs = append(addRoleIDs, parsed)
+		}
 	}
-	if user == nil {
-		return nil, status.Error(codes.NotFound, "user not found")
+	for _, id := range req.RemoveRoleIds {
+		if parsed, err := uuid.Parse(id); err == nil {
+			removeRoleIDs = append(removeRoleIDs, parsed)
+		}
 	}
 
-	// TODO: Implement role assignment using role repository
-	// For now, return success with current roles
+	result, err := s.assignRolesUseCase.Execute(ctx, userID, addRoleIDs, removeRoleIDs)
+	if err != nil {
+		switch err {
+		case domain.ErrUserNotFound:
+			return nil, status.Error(codes.NotFound, "user not found")
+		case domain.ErrRoleNotFound:
+			return nil, status.Error(codes.NotFound, "one or more roles not found")
+		case domain.ErrRoleTenantMismatch:
+			return nil, status.Error(codes.InvalidArgument, "role tenant does not match user tenant")
+		default:
+			return nil, status.Error(codes.Internal, "failed to assign roles")
+		}
+	}
+
+	var userRoles []*authv1.UserRole
+	for _, ur := range result.UserRoles {
+		role, _ := s.roleRepo.GetByID(ctx, ur.RoleID)
+		if role != nil {
+			userRoles = append(userRoles, &authv1.UserRole{
+				RoleId:   role.ID.String(),
+				Name:     role.Name,
+				TenantId: role.TenantID.String(),
+			})
+		}
+	}
+
 	return &authv1.AssignRolesResponse{
-		Success: true,
-		UserRoles: []*authv1.UserRole{
-			// Populate from user.Roles
-		},
+		Success:   result.Success,
+		UserRoles: userRoles,
 	}, nil
 }
 

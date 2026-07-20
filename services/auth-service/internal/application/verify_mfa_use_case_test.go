@@ -13,7 +13,7 @@ func TestVerifyMFAChallengeUseCase_Execute(t *testing.T) {
 	ctx := context.Background()
 
 	// Mock dependencies
-	mockUserRepo := &mockUserRepository{
+	mockUserRepo := &mfaMockUserRepository{
 		user: &domain.User{
 			ID:       uuid.New(),
 			Username: "testuser",
@@ -34,8 +34,8 @@ func TestVerifyMFAChallengeUseCase_Execute(t *testing.T) {
 		},
 	}
 
-	mockSessionRepo := &mockSessionRepository{}
-	mockTokenService := &mockTokenService{
+	mockSessionRepo := &mfaMockSessionRepository{}
+	mfaMockTokenService := &mfaMockTokenService{
 		tokenPair: &domain.TokenPair{
 			AccessToken:  "access-token",
 			RefreshToken: "refresh-token",
@@ -43,7 +43,7 @@ func TestVerifyMFAChallengeUseCase_Execute(t *testing.T) {
 		},
 	}
 
-	mockPermResolver := &mockPermissionResolver{
+	mockPermResolver := &mfaMockPermissionResolver{
 		perms: []domain.ResolvedPermission{
 			{Permission: domain.Permission{Name: "patient:read:own"}},
 		},
@@ -55,8 +55,8 @@ func TestVerifyMFAChallengeUseCase_Execute(t *testing.T) {
 		},
 	}
 
-	mockUserRoleRepo := &mockUserRoleRepository{}
-	mockRoleRepo := &mockRoleRepository{}
+	mockUserRoleRepo := &mfaMockUserRoleRepository{}
+	mockRoleRepo := &mfaMockRoleRepository{}
 
 	useCase := NewVerifyMFAChallengeUseCase(
 		mockUserRepo,
@@ -65,7 +65,7 @@ func TestVerifyMFAChallengeUseCase_Execute(t *testing.T) {
 		mockSessionRepo,
 		mockUserRoleRepo,
 		mockRoleRepo,
-		mockTokenService,
+		mfaMockTokenService,
 		mockPermResolver,
 	)
 
@@ -95,14 +95,14 @@ func TestVerifyMFAChallengeUseCase_Execute(t *testing.T) {
 func TestVerifyMFAChallengeUseCase_UserNotFound(t *testing.T) {
 	ctx := context.Background()
 
-	mockUserRepo := &mockUserRepository{user: nil}
+	mockUserRepo := &mfaMockUserRepository{user: nil}
 	mockMFARepo := &mockMFARepository{}
-	mockSessionRepo := &mockSessionRepository{}
-	mockTokenService := &mockTokenService{}
-	mockPermResolver := &mockPermissionResolver{}
+	mockSessionRepo := &mfaMockSessionRepository{}
+	mfaMockTokenService := &mfaMockTokenService{}
+	mockPermResolver := &mfaMockPermissionResolver{}
 	mockMFAService := &mockMFAService{}
-	mockUserRoleRepo := &mockUserRoleRepository{}
-	mockRoleRepo := &mockRoleRepository{}
+	mockUserRoleRepo := &mfaMockUserRoleRepository{}
+	mockRoleRepo := &mfaMockRoleRepository{}
 
 	useCase := NewVerifyMFAChallengeUseCase(
 		mockUserRepo,
@@ -111,7 +111,7 @@ func TestVerifyMFAChallengeUseCase_UserNotFound(t *testing.T) {
 		mockSessionRepo,
 		mockUserRoleRepo,
 		mockRoleRepo,
-		mockTokenService,
+		mfaMockTokenService,
 		mockPermResolver,
 	)
 
@@ -121,15 +121,15 @@ func TestVerifyMFAChallengeUseCase_UserNotFound(t *testing.T) {
 	}
 }
 
-type mockUserRepository struct {
+type mfaMockUserRepository struct {
 	user *domain.User
 }
 
-func (m *mockUserRepository) Create(ctx context.Context, user *domain.User) error { return nil }
-func (m *mockUserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) { return m.user, nil }
-func (m *mockUserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) { return m.user, nil }
-func (m *mockUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) { return m.user, nil }
-func (m *mockUserRepository) Update(ctx context.Context, user *domain.User) error { return nil }
+func (m *mfaMockUserRepository) Create(ctx context.Context, user *domain.User) error { return nil }
+func (m *mfaMockUserRepository) GetByUsername(ctx context.Context, username string) (*domain.User, error) { return m.user, nil }
+func (m *mfaMockUserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) { return m.user, nil }
+func (m *mfaMockUserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) { return m.user, nil }
+func (m *mfaMockUserRepository) Update(ctx context.Context, user *domain.User) error { return nil }
 
 type mockMFARepository struct {
 	mfaCred *domain.MFACredential
@@ -140,34 +140,34 @@ func (m *mockMFARepository) GetByUserID(ctx context.Context, userID uuid.UUID, m
 func (m *mockMFARepository) Update(ctx context.Context, mfa *domain.MFACredential) error { return nil }
 func (m *mockMFARepository) Delete(ctx context.Context, userID uuid.UUID, mfaType domain.MFAType) error { return nil }
 
-type mockSessionRepository struct{}
+type mfaMockSessionRepository struct{}
 
-func (m *mockSessionRepository) Create(ctx context.Context, session *domain.Session) error { return nil }
-func (m *mockSessionRepository) GetByToken(ctx context.Context, token string) (*domain.Session, error) { return nil, nil }
-func (m *mockSessionRepository) Delete(ctx context.Context, token string) error { return nil }
-func (m *mockSessionRepository) UpdateLastActivity(ctx context.Context, token string) error { return nil }
-func (m *mockSessionRepository) UpdateToken(ctx context.Context, oldToken, newToken string, expiresAt time.Time) error { return nil }
-func (m *mockSessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error { return nil }
+func (m *mfaMockSessionRepository) Create(ctx context.Context, session *domain.Session) error { return nil }
+func (m *mfaMockSessionRepository) GetByToken(ctx context.Context, token string) (*domain.Session, error) { return nil, nil }
+func (m *mfaMockSessionRepository) Delete(ctx context.Context, token string) error { return nil }
+func (m *mfaMockSessionRepository) UpdateLastActivity(ctx context.Context, token string) error { return nil }
+func (m *mfaMockSessionRepository) UpdateToken(ctx context.Context, oldToken, newToken string, expiresAt time.Time) error { return nil }
+func (m *mfaMockSessionRepository) DeleteByUserID(ctx context.Context, userID uuid.UUID) error { return nil }
 
-type mockTokenService struct {
+type mfaMockTokenService struct {
 	tokenPair *domain.TokenPair
 }
 
-func (m *mockTokenService) GenerateTokenPair(ctx context.Context, user *domain.User, roles, perms []string, permVersion int64) (*domain.TokenPair, error) {
+func (m *mfaMockTokenService) GenerateTokenPair(ctx context.Context, user *domain.User, roles, perms []string, permVersion int64) (*domain.TokenPair, error) {
 	return m.tokenPair, nil
 }
-func (m *mockTokenService) ValidateAccessToken(ctx context.Context, token string) (*domain.User, error) { return nil, nil }
-func (m *mockTokenService) ValidateRefreshToken(ctx context.Context, token string) (*domain.User, error) { return nil, nil }
+func (m *mfaMockTokenService) ValidateAccessToken(ctx context.Context, token string) (*domain.User, error) { return nil, nil }
+func (m *mfaMockTokenService) ValidateRefreshToken(ctx context.Context, token string) (*domain.User, error) { return nil, nil }
 
-type mockPermissionResolver struct {
+type mfaMockPermissionResolver struct {
 	perms []domain.ResolvedPermission
 }
 
-func (m *mockPermissionResolver) ResolvePermissions(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.ResolvedPermission, error) { return m.perms, nil }
-func (m *mockPermissionResolver) HasPermission(ctx context.Context, userID, tenantID uuid.UUID, permission string, resourceCtx *domain.ResourceContext) (bool, error) { return true, nil }
-func (m *mockPermissionResolver) GetUserRoles(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.Role, error) { return nil, nil }
-func (m *mockPermissionResolver) GetEffectivePermissions(ctx context.Context, userID, tenantID uuid.UUID) ([]string, error) { return nil, nil }
-func (m *mockPermissionResolver) InvalidateCache(ctx context.Context, userID, tenantID uuid.UUID) error { return nil }
+func (m *mfaMockPermissionResolver) ResolvePermissions(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.ResolvedPermission, error) { return m.perms, nil }
+func (m *mfaMockPermissionResolver) HasPermission(ctx context.Context, userID, tenantID uuid.UUID, permission string, resourceCtx *domain.ResourceContext) (bool, error) { return true, nil }
+func (m *mfaMockPermissionResolver) GetUserRoles(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.Role, error) { return nil, nil }
+func (m *mfaMockPermissionResolver) GetEffectivePermissions(ctx context.Context, userID, tenantID uuid.UUID) ([]string, error) { return nil, nil }
+func (m *mfaMockPermissionResolver) InvalidateCache(ctx context.Context, userID, tenantID uuid.UUID) error { return nil }
 
 type mockMFAService struct {
 	verifyFunc func(ctx context.Context, userID uuid.UUID, challengeID, code string) (bool, error)
@@ -186,29 +186,29 @@ func (m *mockMFAService) HashBackupCodes(codes []string) ([]string, error) { ret
 func (m *mockMFAService) VerifyBackupCode(hashedCodes []string, providedCode string) (bool, []string, error) { return false, nil, nil }
 func (m *mockMFAService) GenerateBackupCodes() ([]string, error) { return nil, nil }
 
-type mockUserRoleRepository struct{}
+type mfaMockUserRoleRepository struct{}
 
-func (m *mockUserRoleRepository) Assign(ctx context.Context, ur *domain.UserRole) error { return nil }
-func (m *mockUserRoleRepository) Revoke(ctx context.Context, userID, roleID, tenantID uuid.UUID) error { return nil }
-func (m *mockUserRoleRepository) GetByUser(ctx context.Context, userID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
-func (m *mockUserRoleRepository) GetByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
-func (m *mockUserRoleRepository) GetByRole(ctx context.Context, roleID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
-func (m *mockUserRoleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
-func (m *mockUserRoleRepository) IsAssigned(ctx context.Context, userID, roleID, tenantID uuid.UUID) (bool, error) { return false, nil }
-func (m *mockUserRoleRepository) GetActiveByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.UserRole, error) { return []domain.UserRole{}, nil }
-func (m *mockUserRoleRepository) CountByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) (int, error) { return 0, nil }
+func (m *mfaMockUserRoleRepository) Assign(ctx context.Context, ur *domain.UserRole) error { return nil }
+func (m *mfaMockUserRoleRepository) Revoke(ctx context.Context, userID, roleID, tenantID uuid.UUID) error { return nil }
+func (m *mfaMockUserRoleRepository) GetByUser(ctx context.Context, userID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
+func (m *mfaMockUserRoleRepository) GetByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
+func (m *mfaMockUserRoleRepository) GetByRole(ctx context.Context, roleID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
+func (m *mfaMockUserRoleRepository) ListByTenant(ctx context.Context, tenantID uuid.UUID) ([]domain.UserRole, error) { return nil, nil }
+func (m *mfaMockUserRoleRepository) IsAssigned(ctx context.Context, userID, roleID, tenantID uuid.UUID) (bool, error) { return false, nil }
+func (m *mfaMockUserRoleRepository) GetActiveByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]domain.UserRole, error) { return []domain.UserRole{}, nil }
+func (m *mfaMockUserRoleRepository) CountByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) (int, error) { return 0, nil }
 
-type mockRoleRepository struct{}
+type mfaMockRoleRepository struct{}
 
-func (m *mockRoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Role, error) { return nil, nil }
-func (m *mockRoleRepository) GetByName(ctx context.Context, name string) (*domain.Role, error) { return nil, nil }
-func (m *mockRoleRepository) GetWithPermissions(ctx context.Context, id uuid.UUID) (*domain.Role, error) { return nil, nil }
-func (m *mockRoleRepository) GetInheritedRoles(ctx context.Context, roleID uuid.UUID) ([]domain.Role, error) { return nil, nil }
-func (m *mockRoleRepository) List(ctx context.Context) ([]domain.Role, error) { return nil, nil }
-func (m *mockRoleRepository) ListByCategory(ctx context.Context, category string) ([]domain.Role, error) { return nil, nil }
-func (m *mockRoleRepository) Create(ctx context.Context, role *domain.Role) error { return nil }
-func (m *mockRoleRepository) Update(ctx context.Context, role *domain.Role) error { return nil }
-func (m *mockRoleRepository) Delete(ctx context.Context, id uuid.UUID) error { return nil }
-func (m *mockRoleRepository) AddPermission(ctx context.Context, roleID, permID uuid.UUID) error { return nil }
-func (m *mockRoleRepository) RemovePermission(ctx context.Context, roleID, permID uuid.UUID) error { return nil }
-func (m *mockRoleRepository) GetPermissions(ctx context.Context, roleID uuid.UUID) ([]domain.Permission, error) { return nil, nil }
+func (m *mfaMockRoleRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Role, error) { return nil, nil }
+func (m *mfaMockRoleRepository) GetByName(ctx context.Context, name string) (*domain.Role, error) { return nil, nil }
+func (m *mfaMockRoleRepository) GetWithPermissions(ctx context.Context, id uuid.UUID) (*domain.Role, error) { return nil, nil }
+func (m *mfaMockRoleRepository) GetInheritedRoles(ctx context.Context, roleID uuid.UUID) ([]domain.Role, error) { return nil, nil }
+func (m *mfaMockRoleRepository) List(ctx context.Context) ([]domain.Role, error) { return nil, nil }
+func (m *mfaMockRoleRepository) ListByCategory(ctx context.Context, category string) ([]domain.Role, error) { return nil, nil }
+func (m *mfaMockRoleRepository) Create(ctx context.Context, role *domain.Role) error { return nil }
+func (m *mfaMockRoleRepository) Update(ctx context.Context, role *domain.Role) error { return nil }
+func (m *mfaMockRoleRepository) Delete(ctx context.Context, id uuid.UUID) error { return nil }
+func (m *mfaMockRoleRepository) AddPermission(ctx context.Context, roleID, permID uuid.UUID) error { return nil }
+func (m *mfaMockRoleRepository) RemovePermission(ctx context.Context, roleID, permID uuid.UUID) error { return nil }
+func (m *mfaMockRoleRepository) GetPermissions(ctx context.Context, roleID uuid.UUID) ([]domain.Permission, error) { return nil, nil }

@@ -40,7 +40,7 @@ func (r *UserRoleRepository) Remove(ctx context.Context, userID, roleID uuid.UUI
 
 func (r *UserRoleRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]*domain.UserRole, error) {
 	query := `
-		SELECT user_id, role_id
+		SELECT user_id, role_id, assigned_at, assigned_by, expires_at
 		FROM user_roles WHERE user_id = $1
 	`
 	rows, err := r.db.Pool.Query(ctx, query, userID)
@@ -52,7 +52,36 @@ func (r *UserRoleRepository) GetByUserID(ctx context.Context, userID uuid.UUID) 
 	var userRoles []*domain.UserRole
 	for rows.Next() {
 		var ur domain.UserRole
-		if err := rows.Scan(&ur.UserID, &ur.RoleID); err != nil {
+		if err := rows.Scan(&ur.UserID, &ur.RoleID, &ur.AssignedAt, &ur.AssignedBy, &ur.ExpiresAt); err != nil {
+			return nil, fmt.Errorf("failed to scan user role: %w", err)
+		}
+		userRoles = append(userRoles, &ur)
+	}
+	return userRoles, nil
+}
+
+// GetActiveByUserAndTenant joins user_roles -> roles to scope by tenant
+// (user_roles carries no tenant_id column in the deployed schema — see
+// migrations/000004_add_rbac_tables.up.sql) and excludes expired
+// assignments.
+func (r *UserRoleRepository) GetActiveByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]*domain.UserRole, error) {
+	query := `
+		SELECT ur.user_id, ur.role_id, ur.assigned_at, ur.assigned_by, ur.expires_at
+		FROM user_roles ur
+		JOIN roles r ON r.id = ur.role_id
+		WHERE ur.user_id = $1 AND r.tenant_id = $2
+		  AND (ur.expires_at IS NULL OR ur.expires_at > NOW())
+	`
+	rows, err := r.db.Pool.Query(ctx, query, userID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active user roles: %w", err)
+	}
+	defer rows.Close()
+
+	var userRoles []*domain.UserRole
+	for rows.Next() {
+		var ur domain.UserRole
+		if err := rows.Scan(&ur.UserID, &ur.RoleID, &ur.AssignedAt, &ur.AssignedBy, &ur.ExpiresAt); err != nil {
 			return nil, fmt.Errorf("failed to scan user role: %w", err)
 		}
 		userRoles = append(userRoles, &ur)

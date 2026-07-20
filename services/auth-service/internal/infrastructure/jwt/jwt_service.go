@@ -18,14 +18,14 @@ var (
 
 type CustomClaims struct {
 	jwt.RegisteredClaims
-	UserID         uuid.UUID `json:"uid"`
-	TenantID       uuid.UUID `json:"tid"`
-	OrganizationID uuid.UUID `json:"oid"`
-	HospitalID     uuid.UUID `json:"hid"`
-	Username       string    `json:"sub_name"`
-	Roles          []string  `json:"roles,omitempty"`
-	Permissions    []string  `json:"perms,omitempty"`
-	PermVersion    int64     `json:"pv,omitempty"`
+	UserID         uuid.UUID  `json:"uid"`
+	TenantID       uuid.UUID  `json:"tid"`
+	OrganizationID *uuid.UUID `json:"oid,omitempty"`
+	HospitalID     *uuid.UUID `json:"hid,omitempty"`
+	Username       string     `json:"sub_name"`
+	Roles          []string   `json:"roles,omitempty"`
+	Permissions    []string   `json:"perms,omitempty"`
+	PermVersion    int64      `json:"pv,omitempty"`
 }
 
 type JWTService struct {
@@ -64,10 +64,24 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, r
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	refreshClaims := jwt.RegisteredClaims{
-		Subject:   user.ID.String(),
-		ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
-		IssuedAt:  jwt.NewNumericDate(now),
+	// ValidateRefreshToken parses into *CustomClaims (to reuse the same
+	// parsing path as access tokens), so the refresh token must carry the
+	// uid/tid/oid/hid fields too — signing it with bare RegisteredClaims
+	// left those zero-valued on every refresh, which then failed at
+	// sessionRepo.Create's user_id foreign key (uuid.Nil isn't a real user).
+	// Deliberately omitting Roles/Permissions/PermVersion: refresh should
+	// re-resolve current permissions from the DB, not replay a stale
+	// snapshot from when the refresh token was minted.
+	refreshClaims := CustomClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   user.ID.String(),
+			ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(now),
+		},
+		UserID:         user.ID,
+		TenantID:       user.TenantID,
+		OrganizationID: user.OrganizationID,
+		HospitalID:     user.HospitalID,
 	}
 
 	refreshToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims).SignedString(s.refreshSecret)
@@ -102,13 +116,17 @@ func (s *JWTService) ValidateAccessToken(ctx context.Context, tokenStr string) (
 		return nil, ErrInvalidToken
 	}
 
+	// domain.User.Roles is []Role (full objects), but the token only carries
+	// role names ([]string, for JWT payload size) — left unset here, same as
+	// the DB-load path (UserRepository never hydrates it either). Callers
+	// needing roles/permissions resolve them via PermissionResolver against
+	// the DB, not from token claims.
 	return &domain.User{
 		ID:             claims.UserID,
 		Username:       claims.Username,
 		TenantID:       claims.TenantID,
 		OrganizationID: claims.OrganizationID,
 		HospitalID:     claims.HospitalID,
-		Roles:          claims.Roles,
 		Permissions:    claims.Permissions,
 		PermVersion:    claims.PermVersion,
 	}, nil

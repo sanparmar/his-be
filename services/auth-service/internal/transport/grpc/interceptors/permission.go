@@ -17,10 +17,26 @@ type PermissionResolver interface {
 	HasPermission(ctx context.Context, userID uuid.UUID, userTenantID uuid.UUID, permission string, resourceCtx *domain.ResourceContext) (bool, error)
 }
 
-// rpcToPermission maps gRPC method names to required permissions
+// rpcToPermission maps gRPC method names to a required permission that's
+// unconditional for the whole method, regardless of request content.
+//
+// "role:assign" and "permission:read" (the original values here) don't
+// exist anywhere in the deployed permission taxonomy (see
+// migrations/000006_seed_demo_rbac.up.sql — resources are patients,
+// appointments, billing, clinical, laboratory, radiology, admin, reports),
+// so every caller, including admin, was unconditionally denied.
+//
+// AssignRoles is remapped to domain.AdminRolesPermission ("Manage roles and
+// permissions" in the seed data), the existing permission that already
+// matches its intent. GetEffectivePermissions is NOT listed here even
+// though it also requires domain.AdminRolesPermission in one case: whether
+// it's required depends on request content (a caller reading their own
+// effective permissions needs no extra permission at all), which this
+// static per-method map can't express — see handlers.go's
+// GetEffectivePermissions, which calls domain.CanAccessEffectivePermissions
+// directly instead.
 var rpcToPermission = map[string]string{
-	"/auth.v1.AuthService/AssignRoles":             "role:assign",
-	"/auth.v1.AuthService/GetEffectivePermissions": "permission:read",
+	"/auth.v1.AuthService/AssignRoles": domain.AdminRolesPermission,
 }
 
 // isProtectedMethod checks if a method requires permission check

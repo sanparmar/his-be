@@ -86,11 +86,18 @@ func isPublicMethod(method string) bool {
 	publicMethods := map[string]bool{
 		"/auth.v1.AuthService/AuthenticateCredentials": true,
 		"/auth.v1.AuthService/ProvisionIdentity":       true,
-		"/auth.v1.AuthService/InitiateMFAChallenge":    true,
-		"/auth.v1.AuthService/VerifyMFAChallenge":      true,
-		"/auth.v1.AuthService/HealthCheck":             true,
-		"/grpc.health.v1.Health/Check":                 true,
-		"/grpc.health.v1.Health/Watch":                 true,
+		// RefreshSession's entire purpose is minting a new access token when
+		// the caller may not have a valid one (expired/absent) — it
+		// authenticates via the refresh token in the request body, not a
+		// bearer header. AuthClient.refresh() (his-fe) already calls it
+		// without an Authorization header; gating it here would break every
+		// session restore / silent-refresh call.
+		"/auth.v1.AuthService/RefreshSession":       true,
+		"/auth.v1.AuthService/InitiateMFAChallenge": true,
+		"/auth.v1.AuthService/VerifyMFAChallenge":   true,
+		"/auth.v1.AuthService/HealthCheck":          true,
+		"/grpc.health.v1.Health/Check":              true,
+		"/grpc.health.v1.Health/Watch":              true,
 	}
 	return publicMethods[method]
 }

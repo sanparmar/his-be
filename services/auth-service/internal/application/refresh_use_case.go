@@ -79,13 +79,4 @@ func (uc *RefreshUseCase) Execute(ctx context.Context, refreshToken string) (*do
 	}
 
 	return tokenPair, nil
-
-	
-		ID:        uuid.New(),
-		UserID:    user.ID,
-		Token:     tokenPair.RefreshToken,
-		ExpiresAt: time.Now().Add(time.Hour * 24 * 7),
-	}
-
-	return tokenPair, nil
 }

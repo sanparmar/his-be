@@ -53,8 +53,8 @@ func (uc *ProvisionIdentityUseCase) Execute(ctx context.Context, username, email
 		Email:          email,
 		PasswordHash:   passwordHash,
 		TenantID:       tenantID,
-		OrganizationID: orgID,
-		HospitalID:     hospitalID,
+		OrganizationID: &orgID,
+		HospitalID:     &hospitalID,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
@@ -63,8 +63,9 @@ func (uc *ProvisionIdentityUseCase) Execute(ctx context.Context, username, email
 		return nil, nil, err
 	}
 
-	// Generate initial token pair
-	tokenPair, err := uc.tokenService.GenerateTokenPair(ctx, user)
+	// Generate initial token pair — a freshly provisioned user has no roles/
+	// permissions assigned yet (that's a separate AssignRoles call).
+	tokenPair, err := uc.tokenService.GenerateTokenPair(ctx, user, []string{}, []string{}, time.Now().Unix())
 	if err != nil {
 		return nil, nil, err
 	}

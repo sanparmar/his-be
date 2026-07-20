@@ -37,6 +37,10 @@ type UserRoleRepository interface {
 	Remove(ctx context.Context, userID, roleID uuid.UUID) error
 	GetByUserID(ctx context.Context, userID uuid.UUID) ([]*UserRole, error)
 	GetByUserIDs(ctx context.Context, userIDs []uuid.UUID) ([]*UserRole, error)
+	// GetActiveByUserAndTenant joins user_roles -> roles to scope by tenant
+	// (user_roles itself carries no tenant_id in the deployed schema) and
+	// excludes expired assignments.
+	GetActiveByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]*UserRole, error)
 }
 
 type MFARepository interface {
@@ -48,33 +52,10 @@ type MFARepository interface {
 
 type PermissionRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*Permission, error)
-	GetByName(ctx context.Context, name string) (*Permission, error)
 	GetByResourceAction(ctx context.Context, resource, action string) ([]Permission, error)
-	ListByCategory(ctx context.Context, category string) ([]Permission, error)
 	ListAll(ctx context.Context) ([]Permission, error)
+	// GetByRoleIDs resolves permissions via the role_permissions join for a
+	// batch of roles — the real path GetEffectivePermissions uses.
+	GetByRoleIDs(ctx context.Context, roleIDs []uuid.UUID) ([]Permission, error)
 	Create(ctx context.Context, perm *Permission) error
-}
-
-type RoleRepository interface {
-	GetByID(ctx context.Context, id uuid.UUID) (*Role, error)
-	GetByName(ctx context.Context, name string) (*Role, error)
-	GetWithPermissions(ctx context.Context, id uuid.UUID) (*Role, error)
-	GetInheritedRoles(ctx context.Context, roleID uuid.UUID) ([]Role, error)
-	List(ctx context.Context) ([]Role, error)
-	ListByCategory(ctx context.Context, category string) ([]Role, error)
-	Create(ctx context.Context, role *Role) error
-	Update(ctx context.Context, role *Role) error
-	AddPermission(ctx context.Context, roleID, permID uuid.UUID) error
-	RemovePermission(ctx context.Context, roleID, permID uuid.UUID) error
-	GetPermissions(ctx context.Context, roleID uuid.UUID) ([]Permission, error)
-}
-
-type UserRoleRepository interface {
-	Assign(ctx context.Context, ur *UserRole) error
-	Revoke(ctx context.Context, userID, roleID, tenantID uuid.UUID) error
-	GetByUser(ctx context.Context, userID uuid.UUID) ([]UserRole, error)
-	GetByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]UserRole, error)
-	GetActiveByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) ([]UserRole, error)
-	ListByRole(ctx context.Context, roleID uuid.UUID) ([]UserRole, error)
-	CountByUserAndTenant(ctx context.Context, userID, tenantID uuid.UUID) (int, error)
 }

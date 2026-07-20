@@ -147,8 +147,6 @@ func TestMFAService_VerifyChallenge_Expired(t *testing.T) {
 		Addr: "localhost:6379",
 	})
 
-	mfaService := NewMFAService(NewTOTPService(), client)
-
 	ctx := context.Background()
 	userID := uuid.New()
 

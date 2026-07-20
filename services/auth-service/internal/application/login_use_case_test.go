@@ -7,7 +7,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 )
 
 func TestLoginUseCase_Execute_Success(t *testing.T) {

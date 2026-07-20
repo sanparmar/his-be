@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/mfa"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	grpcsvc "github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc/interceptors"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -66,10 +66,18 @@ func main() {
 		logger.Warn("failed to connect to Redis, token revocation and perm cache will not work", zap.Error(err))
 	}
 	var revocationStore *redis.TokenRevocationStore
-	var permCache *redis.PermCache
+	// Declared as the domain.PermCache interface (not *redis.PermCache) so
+	// that leaving it unset when Redis is unavailable produces a true nil
+	// interface — assigning a nil *redis.PermCache concrete pointer to a
+	// domain.PermCache-typed variable instead produces a non-nil interface
+	// wrapping a nil pointer, and PermissionResolver's `permCache != nil`
+	// checks would then call methods on that nil pointer and panic.
+	var permCache domain.PermCache
+	var mfaService *mfa.MFAService
 	if redisClient != nil {
 		revocationStore = redis.NewTokenRevocationStore(redisClient.Client)
 		permCache = redis.NewPermCache(redisClient.Client, 15*time.Minute)
+		mfaService = mfa.NewMFAService(mfa.NewTOTPService(), redisClient.Client)
 		defer redisClient.Close()
 	}
 
@@ -81,9 +89,6 @@ func main() {
 	userRoleRepo := postgres.NewUserRoleRepository(db)
 	permRepo := postgres.NewPermissionRepository(db)
 
-	// MFA Service
-	mfaService := mfa.NewMFAService(mfa.NewTOTPService(), redisClient.Client)
-
 	// Use Cases
 	permResolver := application.NewPermissionResolver(userRoleRepo, roleRepo, permRepo, permCache)
 	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
@@ -93,7 +98,7 @@ func main() {
 	provisionIdentityUseCase := application.NewProvisionIdentityUseCase(userRepo, sessionRepo, jwtService)
 	updateCredentialsUseCase := application.NewUpdateCredentialsUseCase(userRepo, sessionRepo, mfaRepo, jwtService)
 	assignRolesUseCase := application.NewAssignRolesUseCase(userRepo, roleRepo, userRoleRepo, permResolver)
-	verifyMFAUseCase := application.NewVerifyMFAChallengeUseCase(userRepo, mfaRepo, mfaService, sessionRepo, jwtService, permResolver)
+	verifyMFAUseCase := application.NewVerifyMFAChallengeUseCase(userRepo, mfaRepo, mfaService, sessionRepo, userRoleRepo, roleRepo, jwtService, permResolver)
 
 	// Auth validator for interceptor
 	authValidator := grpcsvc.NewAuthValidatorImpl(jwtService, sessionRepo)

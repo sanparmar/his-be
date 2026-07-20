@@ -6,17 +6,44 @@ import (
 	"github.com/google/uuid"
 )
 
+// Role matches the deployed schema (roles table: id, name, description,
+// tenant_id, is_system_role, created_at, updated_at — no category column).
 type Role struct {
-	ID        uuid.UUID `json:"id" db:"id"`
-	Name      string    `json:"name" db:"name"`
-	Category  string    `json:"category" db:"category"`
-	TenantID  uuid.UUID `json:"tenant_id" db:"tenant_id"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	ID           uuid.UUID `json:"id" db:"id"`
+	Name         string    `json:"name" db:"name"`
+	Description  string    `json:"description" db:"description"`
+	TenantID     uuid.UUID `json:"tenant_id" db:"tenant_id"`
+	IsSystemRole bool      `json:"is_system_role" db:"is_system_role"`
+	CreatedAt    time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
 
 type UserRole struct {
-	UserID uuid.UUID `json:"user_id" db:"user_id"`
-	RoleID uuid.UUID `json:"role_id" db:"role_id"`
+	UserID     uuid.UUID  `json:"user_id" db:"user_id"`
+	RoleID     uuid.UUID  `json:"role_id" db:"role_id"`
+	AssignedAt time.Time  `json:"assigned_at" db:"assigned_at"`
+	AssignedBy *uuid.UUID `json:"assigned_by,omitempty" db:"assigned_by"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty" db:"expires_at"`
+}
+
+func (ur *UserRole) IsExpired() bool {
+	if ur.ExpiresAt == nil {
+		return false
+	}
+	return ur.ExpiresAt.Before(time.Now())
+}
+
+// Permission matches the deployed schema exactly (see
+// migrations/000004_add_rbac_tables.up.sql's `permissions` table: id,
+// resource, action, description, created_at — no name/scope/category
+// columns). Name is derived in-memory (resource:action), not persisted.
+type Permission struct {
+	ID          uuid.UUID `json:"id" db:"id"`
+	Resource    string    `json:"resource" db:"resource"`
+	Action      string    `json:"action" db:"action"`
+	Name        string    `json:"name"`
+	Description string    `json:"description" db:"description"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
 type User struct {

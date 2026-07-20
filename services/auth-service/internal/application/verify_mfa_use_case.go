@@ -50,6 +50,10 @@ type VerifyMFAResult struct {
 }
 
 func (uc *VerifyMFAChallengeUseCase) Execute(ctx context.Context, userID uuid.UUID, challengeID, code string) (*VerifyMFAResult, error) {
+	if uc.mfaService == nil {
+		return nil, domain.ErrMFANotEnabled
+	}
+
 	valid, err := uc.mfaService.VerifyChallenge(ctx, userID, challengeID, code)
 	if err != nil {
 		return nil, err

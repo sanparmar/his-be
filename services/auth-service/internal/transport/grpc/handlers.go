@@ -13,6 +13,7 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/mfa"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc/interceptors"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/validation"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -135,14 +136,10 @@ func (s *AuthService) ValidateSession(ctx context.Context, req *authv1.ValidateS
 		return &authv1.ValidateSessionResponse{Valid: false}, nil
 	}
 
-	// Check session in Postgres/Redis
-	session, err := s.sessionRepo.GetByToken(ctx, req.AccessToken)
-	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to check session")
-	}
-	if session == nil {
-		return &authv1.ValidateSessionResponse{Valid: false}, nil
-	}
+	// Note: the sessions table stores refresh tokens, not access tokens (see
+	// login_use_case.go et al.), so it cannot be used to validate/expire an
+	// access token — access tokens are validated by JWT signature/expiry
+	// alone, same as validator.go's AuthValidatorImpl.
 
 	// Get full user from database
 	user, err := s.userRepo.GetByID(ctx, tokenUser.ID)
@@ -162,7 +159,12 @@ func (s *AuthService) ValidateSession(ctx context.Context, req *authv1.ValidateS
 		Valid:       true,
 		User:        s.domainUserToProto(user),
 		Permissions: permissions,
-		ExpiresAt:   session.ExpiresAt.Unix(),
+		// Approximate: the access token's real expiry isn't threaded back
+		// through jwtService.ValidateAccessToken's return value today. Good
+		// enough for the current caller (grpc-gateway health/debug use), but
+		// worth returning the real exp claim if this response field starts
+		// being relied on for real expiry countdowns.
+		ExpiresAt: time.Now().Add(15 * time.Minute).Unix(),
 	}, nil
 }
 
@@ -382,38 +384,13 @@ func (s *AuthService) AssignRoles(ctx context.Context, req *authv1.AssignRolesRe
 	}, nil
 }
 
-// 8a. InitiateMFAChallenge - Start MFA challenge (returns challenge_id + TOTP secret/QR for enrollment)
-func (s *AuthService) InitiateMFAChallenge(ctx context.Context, req *authv1.InitiateMFAChallengeRequest) (*authv1.InitiateMFAChallengeResponse, error) {
-	if req.UserId == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
-	}
-	if req.MfaType == "" {
-		req.MfaType = "totp"
-	}
-
-	userID, err := uuid.Parse(req.UserId)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
-	}
-
-	mfaType := domain.MFAType(req.MfaType)
-	challenge, secret, qrCode, err := s.mfaService.InitiateChallenge(ctx, userID, mfaType)
-	if err != nil {
-		switch err {
-		case mfa.ErrInvalidMFAType:
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		default:
-			return nil, status.Error(codes.Internal, "failed to initiate MFA challenge")
-		}
-	}
-
-	return &authv1.InitiateMFAChallengeResponse{
-		ChallengeId: challenge.ID,
-		MfaType:     string(challenge.MFAType),
-		TotpSecret:  secret,
-		TotpQrCode:  qrCode,
-	}, nil
-}
+// InitiateMFAChallenge intentionally not implemented: it isn't part of the
+// deployed proto contract (api/auth/v1/auth.pb.go has no
+// InitiateMFAChallengeRequest/Response — never regenerated from a .proto
+// change), and adding one is a protobuf contract change out of scope for
+// this integration fix. MFA enrolment already works via UpdateCredentials
+// (see update_credentials_use_case.go); MFA verification stays blocked (see
+// VerifyMFAChallenge below).
 
 // 8b. VerifyMFAChallenge - TOTP/WebAuthn verification
 func (s *AuthService) VerifyMFAChallenge(ctx context.Context, req *authv1.VerifyMFAChallengeRequest) (*authv1.VerifyMFAChallengeResponse, error) {
@@ -456,6 +433,28 @@ func (s *AuthService) GetEffectivePermissions(ctx context.Context, req *authv1.G
 		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
 	}
 
+	// Self-service: a caller may always read their own effective
+	// permissions (AuthInterceptor already guarantees this RPC is
+	// authenticated, so callerID is always present). Reading another
+	// user's requires domain.AdminRolesPermission — this RPC isn't gated
+	// by PermissionInterceptor's static map since the check depends on
+	// request content (self vs. other), not just the method name.
+	callerID, ok := interceptors.GetUserID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "user ID not found in context")
+	}
+	callerTenantID, ok := interceptors.GetTenantID(ctx)
+	if !ok {
+		return nil, status.Error(codes.Unauthenticated, "tenant ID not found in context")
+	}
+	allowed, err := domain.CanAccessEffectivePermissions(ctx, s.permResolver, callerID, userID, callerTenantID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "permission check failed")
+	}
+	if !allowed {
+		return nil, status.Error(codes.PermissionDenied, "permission denied: "+domain.AdminRolesPermission)
+	}
+
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, status.Error(codes.NotFound, "user not found")
@@ -469,9 +468,17 @@ func (s *AuthService) GetEffectivePermissions(ctx context.Context, req *authv1.G
 		return nil, status.Error(codes.Internal, "failed to get effective permissions")
 	}
 
+	// user.Roles is never hydrated by UserRepository (see user_repository.go)
+	// — resolve roles the same real way permissions are resolved, via
+	// user_roles, rather than an always-empty field.
+	roles, err := s.permResolver.GetUserRoles(ctx, userID, user.TenantID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to get roles")
+	}
+
 	return &authv1.GetEffectivePermissionsResponse{
 		Permissions: permissions,
-		Roles:       s.domainRolesToProto(user.Roles),
+		Roles:       s.domainRolesToProto(roles),
 	}, nil
 }
 

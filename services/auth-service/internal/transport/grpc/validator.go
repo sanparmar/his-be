@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"time"
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
@@ -27,20 +26,16 @@ func NewAuthValidatorImpl(jwtService *jwt.JWTService, sessionRepo *postgres.Sess
 	}
 }
 
-// ValidateToken implements AuthValidator
+// ValidateToken implements AuthValidator. Access tokens are validated by JWT
+// signature/expiry alone (stateless) — the sessions table stores refresh
+// tokens (see login_use_case.go/refresh_use_case.go/
+// provision_identity_use_case.go, all of which write tokenPair.RefreshToken
+// with a 7-day expiry), so looking sessions up by access token here always
+// returned nil and rejected every authenticated request.
 func (v *AuthValidatorImpl) ValidateToken(ctx context.Context, token string) (string, uuid.UUID, error) {
 	user, err := v.jwtService.ValidateAccessToken(ctx, token)
 	if err != nil {
 		return "", uuid.Nil, err
-	}
-
-	// Check session in database
-	session, err := v.sessionRepo.GetByToken(ctx, token)
-	if err != nil {
-		return "", uuid.Nil, err
-	}
-	if session == nil || session.ExpiresAt.Before(time.Now()) {
-		return "", uuid.Nil, jwt.ErrInvalidToken
 	}
 
 	return user.ID.String(), user.TenantID, nil

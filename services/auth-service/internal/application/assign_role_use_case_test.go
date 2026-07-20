@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
 )
 
 func TestAssignRoleUseCase_Execute(t *testing.T) {

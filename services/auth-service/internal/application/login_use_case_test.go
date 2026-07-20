@@ -4,10 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"golang.org/x/crypto/bcrypt"
-
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func TestLoginUseCase_Execute_Success(t *testing.T) {

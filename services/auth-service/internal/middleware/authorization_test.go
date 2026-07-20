@@ -6,10 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
-	"github.com/his-platform/auth-service/internal/infrastructure/jwt"
 )
 
 func TestAuthorizationMiddleware_RequirePermission(t *testing.T) {

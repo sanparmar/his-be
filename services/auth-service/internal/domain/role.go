@@ -2,18 +2,20 @@ package domain
 
 import (
 	"context"
+	"time"
+
 	"github.com/google/uuid"
 )
 
 type Role struct {
-	ID          uuid.UUID +++          uuid.UUID `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	DisplayName string    `json:"display_name" db:"display_name"`
-	Category    string    `json:"category" db:"category"`
+	ID          uuid.UUID  `json:"id" db:"id"`
+	Name        string     `json:"name" db:"name"`
+	DisplayName string     `json:"display_name" db:"display_name"`
+	Category    string     `json:"category" db:"category"`
 	ParentID    *uuid.UUID `json:"parent_id,omitempty" db:"parent_role_id"`
-	IsSystem    bool      `json:"is_system" db:"is_system"`
-	Description string    `json:"description" db:"description"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	IsSystem    bool       `json:"is_system" db:"is_system"`
+	Description string     `json:"description" db:"description"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
 	Permissions []Permission `json:"permissions,omitempty"`
 }
 

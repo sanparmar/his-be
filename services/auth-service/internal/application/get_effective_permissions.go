@@ -2,8 +2,9 @@ package application
 
 import (
 	"context"
+
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
 )
 
 type GetEffectivePermissionsUseCase struct {

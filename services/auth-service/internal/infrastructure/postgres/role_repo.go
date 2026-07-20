@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type RoleRepository struct {

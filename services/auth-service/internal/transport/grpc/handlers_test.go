@@ -7,10 +7,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/application"
-	"github.com/his-platform/auth-service/internal/domain"
-	authv1 "github.com/his-platform/auth-service/proto/auth/v1"
+	authv1 "github.com/deloitte-us-consulting/his-be/services/auth-service/proto/auth/v1"
 )
 
 func TestAuthHandlers_Login(t *testing.T) {

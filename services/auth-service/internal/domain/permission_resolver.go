@@ -72,6 +72,14 @@ func (r *permissionResolver) ResolvePermissions(ctx context.Context, userID uuid
 	permMap := make(map[string]ResolvedPermission)
 
 	for _, role := range roles {
+		fullRole, err := r.roleRepo.GetWithPermissions(ctx, role.ID)
+		if err != nil {
+			continue
+		}
+		if fullRole != nil {
+			role = *fullRole
+		}
+
 		for _, perm := range role.Permissions {
 			key := perm.Name
 			if existing, ok := permMap[key]; !ok || perm.ScopeLevel() > existing.Permission.ScopeLevel() {

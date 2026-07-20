@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -17,7 +18,7 @@ var ErrInvalidToken = errors.New("invalid or expired token")
 
 // AuthValidator defines the interface for validating authentication tokens.
 type AuthValidator interface {
-	ValidateToken(ctx context.Context, token string) (userID string, err error)
+	ValidateToken(ctx context.Context, token string) (userID string, tenantID uuid.UUID, err error)
 }
 
 // AuthInterceptor returns a unary server interceptor that validates authentication.
@@ -48,31 +49,45 @@ func AuthInterceptor(logger *zap.Logger, validator AuthValidator) grpc.UnaryServ
 		}
 
 		// Validate token
-		userID, err := validator.ValidateToken(ctx, token)
+		userID, tenantID, err := validator.ValidateToken(ctx, token)
 		if err != nil {
 			logger.Warn("token validation failed", zap.String("method", info.FullMethod), zap.Error(err))
 			return nil, status.Error(codes.Unauthenticated, "invalid or expired token")
 		}
 
-		// Add user ID to context
+		// Add user ID and tenant ID to context
 		ctx = context.WithValue(ctx, userIDKey{}, userID)
+		ctx = context.WithValue(ctx, tenantIDKey{}, tenantID)
 
 		return handler(ctx, req)
 	}
 }
 
 type userIDKey struct{}
+type tenantIDKey struct{}
 
 // GetUserID extracts the user ID from context.
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey{}).(string)
-	return userID, ok
+func GetUserID(ctx context.Context) (uuid.UUID, bool) {
+	userIDStr, ok := ctx.Value(userIDKey{}).(string)
+	if !ok {
+		return uuid.Nil, false
+	}
+	userID, err := uuid.Parse(userIDStr)
+	return userID, err == nil
+}
+
+// GetTenantID extracts the tenant ID from context.
+func GetTenantID(ctx context.Context) (uuid.UUID, bool) {
+	tenantID, ok := ctx.Value(tenantIDKey{}).(uuid.UUID)
+	return tenantID, ok
 }
 
 func isPublicMethod(method string) bool {
 	publicMethods := map[string]bool{
 		"/auth.v1.AuthService/AuthenticateCredentials": true,
 		"/auth.v1.AuthService/ProvisionIdentity":       true,
+		"/auth.v1.AuthService/InitiateMFAChallenge":    true,
+		"/auth.v1.AuthService/VerifyMFAChallenge":      true,
 		"/auth.v1.AuthService/HealthCheck":             true,
 		"/grpc.health.v1.Health/Check":                 true,
 		"/grpc.health.v1.Health/Watch":                 true,

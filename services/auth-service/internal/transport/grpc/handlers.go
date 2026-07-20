@@ -10,6 +10,7 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/mfa"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/validation"
@@ -21,18 +22,21 @@ import (
 type AuthService struct {
 	authv1.UnimplementedAuthServiceServer
 
-	loginUseCase            *application.LoginUseCase
-	refreshUseCase          *application.RefreshUseCase
-	logoutUseCase           *application.LogoutUseCase
-	meUseCase               *application.MeUseCase
+	loginUseCase             *application.LoginUseCase
+	refreshUseCase           *application.RefreshUseCase
+	logoutUseCase            *application.LogoutUseCase
+	meUseCase                *application.MeUseCase
 	provisionIdentityUseCase *application.ProvisionIdentityUseCase
 	updateCredentialsUseCase *application.UpdateCredentialsUseCase
 	assignRolesUseCase       *application.AssignRolesUseCase
-	userRepo        *postgres.UserRepository
-	sessionRepo     *postgres.SessionRepository
-	roleRepo        *postgres.RoleRepository
-	jwtService      *jwt.JWTService
-	revocationStore *redis.TokenRevocationStore
+	verifyMFAUseCase         *application.VerifyMFAChallengeUseCase
+	mfaService               *mfa.MFAService
+	userRepo                 *postgres.UserRepository
+	sessionRepo              *postgres.SessionRepository
+	roleRepo                 *postgres.RoleRepository
+	jwtService               *jwt.JWTService
+	revocationStore          *redis.TokenRevocationStore
+	permResolver             domain.PermissionResolver
 }
 
 func NewAuthService(
@@ -43,25 +47,31 @@ func NewAuthService(
 	provisionIdentityUseCase *application.ProvisionIdentityUseCase,
 	updateCredentialsUseCase *application.UpdateCredentialsUseCase,
 	assignRolesUseCase *application.AssignRolesUseCase,
+	verifyMFAUseCase *application.VerifyMFAChallengeUseCase,
+	mfaService *mfa.MFAService,
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
 	roleRepo *postgres.RoleRepository,
 	jwtService *jwt.JWTService,
 	revocationStore *redis.TokenRevocationStore,
+	permResolver domain.PermissionResolver,
 ) *AuthService {
 	return &AuthService{
-		loginUseCase:            loginUseCase,
-		refreshUseCase:          refreshUseCase,
-		logoutUseCase:           logoutUseCase,
-		meUseCase:               meUseCase,
+		loginUseCase:             loginUseCase,
+		refreshUseCase:           refreshUseCase,
+		logoutUseCase:            logoutUseCase,
+		meUseCase:                meUseCase,
 		provisionIdentityUseCase: provisionIdentityUseCase,
 		updateCredentialsUseCase: updateCredentialsUseCase,
 		assignRolesUseCase:       assignRolesUseCase,
-		userRepo:        userRepo,
-		sessionRepo:     sessionRepo,
-		roleRepo:        roleRepo,
-		jwtService:      jwtService,
-		revocationStore: revocationStore,
+		verifyMFAUseCase:         verifyMFAUseCase,
+		mfaService:               mfaService,
+		userRepo:                 userRepo,
+		sessionRepo:              sessionRepo,
+		roleRepo:                 roleRepo,
+		jwtService:               jwtService,
+		revocationStore:          revocationStore,
+		permResolver:             permResolver,
 	}
 }
 
@@ -143,7 +153,10 @@ func (s *AuthService) ValidateSession(ctx context.Context, req *authv1.ValidateS
 		return &authv1.ValidateSessionResponse{Valid: false}, nil
 	}
 
-	permissions := s.getUserPermissions(user)
+	permissions, err := s.permResolver.GetEffectivePermissions(ctx, user.ID, user.TenantID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to get permissions")
+	}
 
 	return &authv1.ValidateSessionResponse{
 		Valid:       true,
@@ -369,15 +382,66 @@ func (s *AuthService) AssignRoles(ctx context.Context, req *authv1.AssignRolesRe
 	}, nil
 }
 
-// 8. VerifyMFAChallenge - TOTP/WebAuthn verification
-func (s *AuthService) VerifyMFAChallenge(ctx context.Context, req *authv1.VerifyMFAChallengeRequest) (*authv1.VerifyMFAChallengeResponse, error) {
-	if req.UserId == "" || req.Code == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id and code are required")
+// 8a. InitiateMFAChallenge - Start MFA challenge (returns challenge_id + TOTP secret/QR for enrollment)
+func (s *AuthService) InitiateMFAChallenge(ctx context.Context, req *authv1.InitiateMFAChallengeRequest) (*authv1.InitiateMFAChallengeResponse, error) {
+	if req.UserId == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id is required")
+	}
+	if req.MfaType == "" {
+		req.MfaType = "totp"
 	}
 
-	// TODO: Implement MFA verification
+	userID, err := uuid.Parse(req.UserId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
+	}
+
+	mfaType := domain.MFAType(req.MfaType)
+	challenge, secret, qrCode, err := s.mfaService.InitiateChallenge(ctx, userID, mfaType)
+	if err != nil {
+		switch err {
+		case mfa.ErrInvalidMFAType:
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, "failed to initiate MFA challenge")
+		}
+	}
+
+	return &authv1.InitiateMFAChallengeResponse{
+		ChallengeId: challenge.ID,
+		MfaType:     string(challenge.MFAType),
+		TotpSecret:  secret,
+		TotpQrCode:  qrCode,
+	}, nil
+}
+
+// 8b. VerifyMFAChallenge - TOTP/WebAuthn verification
+func (s *AuthService) VerifyMFAChallenge(ctx context.Context, req *authv1.VerifyMFAChallengeRequest) (*authv1.VerifyMFAChallengeResponse, error) {
+	if req.UserId == "" || req.Code == "" || req.ChallengeId == "" {
+		return nil, status.Error(codes.InvalidArgument, "user_id, code, and challenge_id are required")
+	}
+
+	userID, err := uuid.Parse(req.UserId)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
+	}
+
+	result, err := s.verifyMFAUseCase.Execute(ctx, userID, req.ChallengeId, req.Code)
+	if err != nil {
+		switch err {
+		case domain.ErrMFAInvalidCode, mfa.ErrInvalidCode:
+			return &authv1.VerifyMFAChallengeResponse{Verified: false}, nil
+		case mfa.ErrChallengeNotFound, mfa.ErrChallengeExpired:
+			return nil, status.Error(codes.NotFound, err.Error())
+		default:
+			return nil, status.Error(codes.Internal, "MFA verification failed")
+		}
+	}
+
 	return &authv1.VerifyMFAChallengeResponse{
-		Verified: false,
+		Verified:     result.Verified,
+		AccessToken:  result.TokenPair.AccessToken,
+		RefreshToken: result.TokenPair.RefreshToken,
 	}, nil
 }
 
@@ -400,7 +464,10 @@ func (s *AuthService) GetEffectivePermissions(ctx context.Context, req *authv1.G
 		return nil, status.Error(codes.NotFound, "user not found")
 	}
 
-	permissions := s.getUserPermissions(user)
+	permissions, err := s.permResolver.GetEffectivePermissions(ctx, userID, user.TenantID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to get effective permissions")
+	}
 
 	return &authv1.GetEffectivePermissionsResponse{
 		Permissions: permissions,
@@ -437,7 +504,7 @@ func (s *AuthService) domainRolesToProto(roles []domain.Role) []*authv1.UserRole
 		protoRoles[i] = &authv1.UserRole{
 			RoleId:   r.ID.String(),
 			Name:     r.Name,
-			TenantId: r.Category, // Using category as tenant_id for now
+			TenantId: r.TenantID.String(),
 		}
 	}
 	return protoRoles

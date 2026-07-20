@@ -8,20 +8,23 @@ import (
 )
 
 type AssignRolesUseCase struct {
-	userRepo     domain.UserRepository
-	roleRepo     domain.RoleRepository
-	userRoleRepo domain.UserRoleRepository
+	userRepo      domain.UserRepository
+	roleRepo      domain.RoleRepository
+	userRoleRepo  domain.UserRoleRepository
+	permResolver  domain.PermissionResolver
 }
 
 func NewAssignRolesUseCase(
 	userRepo domain.UserRepository,
 	roleRepo domain.RoleRepository,
 	userRoleRepo domain.UserRoleRepository,
+	permResolver domain.PermissionResolver,
 ) *AssignRolesUseCase {
 	return &AssignRolesUseCase{
-		userRepo:     userRepo,
-		roleRepo:     roleRepo,
-		userRoleRepo: userRoleRepo,
+		userRepo:      userRepo,
+		roleRepo:      roleRepo,
+		userRoleRepo:  userRoleRepo,
+		permResolver:  permResolver,
 	}
 }
 
@@ -73,6 +76,11 @@ func (uc *AssignRolesUseCase) Execute(
 		if err := uc.userRoleRepo.Remove(ctx, userID, roleID); err != nil {
 			return nil, err
 		}
+	}
+
+	// Invalidate permission cache
+	if uc.permResolver != nil {
+		_ = uc.permResolver.InvalidateCache(ctx, userID, user.TenantID)
 	}
 
 	// Get updated user roles

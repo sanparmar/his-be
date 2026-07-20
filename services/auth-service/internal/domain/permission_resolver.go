@@ -2,20 +2,28 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/google/uuid"
 )
 
 type ResolvedPermission struct {
 	Permission
-	GrantedByRole string `json:"granted_by_role"`
+	GrantedByRole  string `json:"granted_by_role"`
 	GrantedByScope string `json:"granted_by_scope"`
 }
 
 type PermissionResolver interface {
 	ResolvePermissions(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) ([]ResolvedPermission, error)
-	HasPermission(ctx context.Context, userID uuid.UUID, permission string, resourceCtx *ResourceContext) (bool, error)
+	HasPermission(ctx context.Context, userID uuid.UUID, userTenantID uuid.UUID, permission string, resourceCtx *ResourceContext) (bool, error)
 	GetUserRoles(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) ([]Role, error)
 	GetEffectivePermissions(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) ([]string, error)
+	InvalidateCache(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) error
+}
+
+type PermCache interface {
+	Get(ctx context.Context, userID, tenantID uuid.UUID) ([]string, error)
+	Set(ctx context.Context, userID, tenantID uuid.UUID, perms []string) error
+	Invalidate(ctx context.Context, userID, tenantID uuid.UUID) error
 }
 
 type permissionResolver struct {
@@ -24,12 +32,14 @@ type permissionResolver struct {
 	permissionRepo PermissionRepository
 	scopeEval      *ScopeEvaluator
 	permHierarchy  *PermissionHierarchy
+	permCache      PermCache
 }
 
 func NewPermissionResolver(
 	userRoleRepo UserRoleRepository,
 	roleRepo RoleRepository,
 	permissionRepo PermissionRepository,
+	permCache PermCache,
 ) PermissionResolver {
 	return &permissionResolver{
 		userRoleRepo:   userRoleRepo,
@@ -37,10 +47,23 @@ func NewPermissionResolver(
 		permissionRepo: permissionRepo,
 		scopeEval:      NewScopeEvaluator(),
 		permHierarchy:  NewPermissionHierarchy(),
+		permCache:      permCache,
 	}
 }
 
 func (r *permissionResolver) ResolvePermissions(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) ([]ResolvedPermission, error) {
+	if r.permCache != nil {
+		cached, err := r.permCache.Get(ctx, userID, tenantID)
+		if err == nil && cached != nil {
+			perms := make([]ResolvedPermission, len(cached))
+			for i, p := range cached {
+				perm, _ := ParsePermission(p)
+				perms[i] = ResolvedPermission{Permission: *perm}
+			}
+			return perms, nil
+		}
+	}
+
 	roles, err := r.GetUserRoles(ctx, userID, tenantID)
 	if err != nil {
 		return nil, err
@@ -66,11 +89,19 @@ func (r *permissionResolver) ResolvePermissions(ctx context.Context, userID uuid
 		result = append(result, p)
 	}
 
+	if r.permCache != nil {
+		permStrings := make([]string, len(result))
+		for i, p := range result {
+			permStrings[i] = p.Name
+		}
+		_ = r.permCache.Set(ctx, userID, tenantID, permStrings)
+	}
+
 	return result, nil
 }
 
-func (r *permissionResolver) HasPermission(ctx context.Context, userID uuid.UUID, permission string, resourceCtx *ResourceContext) (bool, error) {
-	perms, err := r.ResolvePermissions(ctx, userID, resourceCtx.TenantID)
+func (r *permissionResolver) HasPermission(ctx context.Context, userID uuid.UUID, userTenantID uuid.UUID, permission string, resourceCtx *ResourceContext) (bool, error) {
+	perms, err := r.ResolvePermissions(ctx, userID, userTenantID)
 	if err != nil {
 		return false, err
 	}
@@ -84,7 +115,7 @@ func (r *permissionResolver) HasPermission(ctx context.Context, userID uuid.UUID
 		if r.permHierarchy.Implies(p.Name, requiredPerm.Name) {
 			userCtx := &UserContext{
 				UserID:         userID,
-				TenantID:       resourceCtx.TenantID,
+				TenantID:       userTenantID,
 				OrganizationID: resourceCtx.OrganizationID,
 				HospitalID:     resourceCtx.HospitalID,
 				DepartmentID:   resourceCtx.DepartmentID,
@@ -122,6 +153,13 @@ func (r *permissionResolver) GetUserRoles(ctx context.Context, userID uuid.UUID,
 }
 
 func (r *permissionResolver) GetEffectivePermissions(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) ([]string, error) {
+	if r.permCache != nil {
+		cached, err := r.permCache.Get(ctx, userID, tenantID)
+		if err == nil && cached != nil {
+			return cached, nil
+		}
+	}
+
 	perms, err := r.ResolvePermissions(ctx, userID, tenantID)
 	if err != nil {
 		return nil, err
@@ -132,4 +170,11 @@ func (r *permissionResolver) GetEffectivePermissions(ctx context.Context, userID
 		result = append(result, p.Name)
 	}
 	return result, nil
+}
+
+func (r *permissionResolver) InvalidateCache(ctx context.Context, userID uuid.UUID, tenantID uuid.UUID) error {
+	if r.permCache != nil {
+		return r.permCache.Invalidate(ctx, userID, tenantID)
+	}
+	return nil
 }

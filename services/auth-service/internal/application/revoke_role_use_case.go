@@ -32,7 +32,9 @@ func (uc *RevokeRoleUseCase) Execute(ctx context.Context, req RevokeRoleRequest)
 		return err
 	}
 
-	uc.permResolver.InvalidateCache(req.UserID, req.TenantID)
+	if uc.permResolver != nil {
+		_ = uc.permResolver.InvalidateCache(ctx, req.UserID, req.TenantID)
+	}
 
 	return nil
 }

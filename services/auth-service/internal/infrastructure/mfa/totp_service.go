@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"image/png"
+	"time"
 
 	"github.com/pquerna/otp/totp"
 )
@@ -35,6 +36,10 @@ func (s *TOTPService) GenerateSecret(accountName string) (string, error) {
 		return "", err
 	}
 	return key.Secret(), nil
+}
+
+func (s *TOTPService) GenerateCurrentCode(secret string) (string, error) {
+	return totp.GenerateCode(secret, time.Now())
 }
 
 func (s *TOTPService) GenerateQRCode(secret, accountName string) (string, error) {
@@ -71,7 +76,7 @@ func (s *TOTPService) GenerateBackupCodes() ([]string, error) {
 		if _, err := rand.Read(b); err != nil {
 			return nil, err
 		}
-		codes[i] = fmt.Sprintf("%x", b)
+		codes[i] = base64.StdEncoding.EncodeToString(b)[:CodeLength]
 	}
 	return codes, nil
 }

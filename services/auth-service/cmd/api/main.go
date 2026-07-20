@@ -11,6 +11,7 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/middleware"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/http/handlers"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/http/router"
@@ -48,7 +49,19 @@ func main() {
 	roleRepo := postgres.NewRoleRepository(db)
 	userRoleRepo := postgres.NewUserRoleRepository(db)
 
-	permResolver := application.NewPermissionResolver(userRoleRepo, roleRepo, permRepo)
+	// Redis Client (for permission cache)
+	redisAddr := getEnv("REDIS_ADDR", "localhost:6379")
+	redisClient, err := redis.NewClient(redisAddr)
+	if err != nil {
+		log.Printf("Failed to connect to Redis, permission cache will not work: %v", err)
+	}
+	var permCache *redis.PermCache
+	if redisClient != nil {
+		permCache = redis.NewPermCache(redisClient.Client, 15*time.Minute)
+		defer redisClient.Close()
+	}
+
+	permResolver := application.NewPermissionResolver(userRoleRepo, roleRepo, permRepo, permCache)
 
 	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
 	refreshUseCase := application.NewRefreshUseCase(sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
@@ -93,4 +106,11 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

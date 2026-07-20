@@ -12,10 +12,12 @@ import (
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/mfa"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	grpcsvc "github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc/interceptors"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -57,15 +59,17 @@ func main() {
 		getEnv("JWT_REFRESH_SECRET", "refresh-secret-key"),
 	)
 
-	// Redis Client (for token revocation)
+	// Redis Client (for token revocation and permission cache)
 	redisAddr := getEnv("REDIS_ADDR", "localhost:6379")
 	redisClient, err := redis.NewClient(redisAddr)
 	if err != nil {
-		logger.Warn("failed to connect to Redis, token revocation will not work", zap.Error(err))
+		logger.Warn("failed to connect to Redis, token revocation and perm cache will not work", zap.Error(err))
 	}
 	var revocationStore *redis.TokenRevocationStore
+	var permCache *redis.PermCache
 	if redisClient != nil {
 		revocationStore = redis.NewTokenRevocationStore(redisClient.Client)
+		permCache = redis.NewPermCache(redisClient.Client, 15*time.Minute)
 		defer redisClient.Close()
 	}
 
@@ -75,18 +79,27 @@ func main() {
 	mfaRepo := postgres.NewMFARepository(db)
 	roleRepo := postgres.NewRoleRepository(db)
 	userRoleRepo := postgres.NewUserRoleRepository(db)
+	permRepo := postgres.NewPermissionRepository(db)
+
+	// MFA Service
+	mfaService := mfa.NewMFAService(mfa.NewTOTPService(), redisClient.Client)
 
 	// Use Cases
-	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService)
-	refreshUseCase := application.NewRefreshUseCase(sessionRepo, jwtService)
+	permResolver := application.NewPermissionResolver(userRoleRepo, roleRepo, permRepo, permCache)
+	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
+	refreshUseCase := application.NewRefreshUseCase(sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
 	logoutUseCase := application.NewLogoutUseCase(sessionRepo)
 	meUseCase := application.NewMeUseCase(jwtService)
 	provisionIdentityUseCase := application.NewProvisionIdentityUseCase(userRepo, sessionRepo, jwtService)
 	updateCredentialsUseCase := application.NewUpdateCredentialsUseCase(userRepo, sessionRepo, mfaRepo, jwtService)
-	assignRolesUseCase := application.NewAssignRolesUseCase(userRepo, roleRepo, userRoleRepo)
+	assignRolesUseCase := application.NewAssignRolesUseCase(userRepo, roleRepo, userRoleRepo, permResolver)
+	verifyMFAUseCase := application.NewVerifyMFAChallengeUseCase(userRepo, mfaRepo, mfaService, sessionRepo, jwtService, permResolver)
 
 	// Auth validator for interceptor
 	authValidator := grpcsvc.NewAuthValidatorImpl(jwtService, sessionRepo)
+
+	// Permission interceptor
+	permissionInterceptor := interceptors.PermissionInterceptor(logger, permResolver)
 
 	// gRPC Server with interceptors
 	grpcPort := getEnv("GRPC_PORT", "9090")
@@ -101,6 +114,7 @@ func main() {
 			interceptors.LoggingInterceptor(logger),
 			interceptors.MetricsInterceptor(),
 			interceptors.AuthInterceptor(logger, authValidator),
+			permissionInterceptor,
 		),
 	)
 
@@ -113,11 +127,14 @@ func main() {
 		provisionIdentityUseCase,
 		updateCredentialsUseCase,
 		assignRolesUseCase,
+		verifyMFAUseCase,
+		mfaService,
 		userRepo,
 		sessionRepo,
 		roleRepo,
 		jwtService,
 		revocationStore,
+		permResolver,
 	)
 
 	// Register services

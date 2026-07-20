@@ -65,7 +65,15 @@ service AuthService {
     };
   };
   
-  // 8. TOTP/WebAuthn verification
+  // 8a. Initiate MFA challenge (returns challenge_id + TOTP secret/QR for enrollment)
+  rpc InitiateMFAChallenge(InitiateMFAChallengeRequest) returns (InitiateMFAChallengeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/mfa/initiate"
+      body: "*"
+    };
+  };
+
+  // 8b. TOTP/WebAuthn verification
   rpc VerifyMFAChallenge(VerifyMFAChallengeRequest) returns (VerifyMFAChallengeResponse) {
     option (google.api.http) = {
       post: "/v1/auth/mfa/verify"
@@ -165,15 +173,17 @@ message UpdateCredentialsResponse {
   repeated string backup_codes = 4;
 }
 
-message AssignRolesRequest {
+message InitiateMFAChallengeRequest {
   string user_id = 1;
-  repeated string role_ids = 2;
-  repeated string remove_role_ids = 3;
+  string mfa_type = 2;  // "totp" | "webauthn"
 }
 
-message AssignRolesResponse {
-  bool success = 1;
-  repeated UserRole user_roles = 2;
+message InitiateMFAChallengeResponse {
+  string challenge_id = 1;
+  string mfa_type = 2;
+  // For TOTP enrollment: secret and QR code (base64 PNG)
+  string totp_secret = 3;
+  string totp_qr_code = 4;
 }
 
 message VerifyMFAChallengeRequest {

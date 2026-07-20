@@ -4,6 +4,24 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	ScopeOwn         = "own"
+	ScopeDepartment  = "department"
+	ScopeHospital    = "hospital"
+	ScopeOrganization = "organization"
+	ScopeTenant      = "tenant"
+	ScopeAll         = "all"
+)
+
+var scopeLevels = map[string]int{
+	ScopeOwn:         0,
+	ScopeDepartment:  1,
+	ScopeHospital:    2,
+	ScopeOrganization: 3,
+	ScopeTenant:      4,
+	ScopeAll:         5,
+}
+
 type UserContext struct {
 	UserID          uuid.UUID
 	TenantID        uuid.UUID
@@ -36,17 +54,17 @@ func (e *ScopeEvaluator) CanAccessResource(userCtx *UserContext, resourceCtx *Re
 	requiredLevel := perm.ScopeLevel()
 
 	switch requiredLevel {
-	case validScopes[ScopeOwn]:
+	case scopeLevels[ScopeOwn]:
 		return e.checkOwnScope(userCtx, resourceCtx)
-	case validScopes[ScopeDepartment]:
+	case scopeLevels[ScopeDepartment]:
 		return e.checkDepartmentScope(userCtx, resourceCtx)
-	case validScopes[ScopeHospital]:
+	case scopeLevels[ScopeHospital]:
 		return e.checkHospitalScope(userCtx, resourceCtx)
-	case validScopes[ScopeOrganization]:
+	case scopeLevels[ScopeOrganization]:
 		return e.checkOrganizationScope(userCtx, resourceCtx)
-	case validScopes[ScopeTenant]:
+	case scopeLevels[ScopeTenant]:
 		return e.checkTenantScope(userCtx, resourceCtx)
-	case validScopes[ScopeAll]:
+	case scopeLevels[ScopeAll]:
 		return true
 	default:
 		return false

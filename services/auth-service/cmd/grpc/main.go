@@ -17,7 +17,6 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	grpcsvc "github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/transport/grpc/interceptors"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -93,7 +92,7 @@ func main() {
 	provisionIdentityUseCase := application.NewProvisionIdentityUseCase(userRepo, sessionRepo, jwtService)
 	updateCredentialsUseCase := application.NewUpdateCredentialsUseCase(userRepo, sessionRepo, mfaRepo, jwtService)
 	assignRolesUseCase := application.NewAssignRolesUseCase(userRepo, roleRepo, userRoleRepo, permResolver)
-	verifyMFAUseCase := application.NewVerifyMFAChallengeUseCase(userRepo, mfaRepo, mfaService, sessionRepo, jwtService, permResolver)
+	verifyMFAUseCase := application.NewVerifyMFAChallengeUseCase(userRepo, mfaRepo, mfaService, sessionRepo, userRoleRepo, roleRepo, jwtService, permResolver)
 
 	// Auth validator for interceptor
 	authValidator := grpcsvc.NewAuthValidatorImpl(jwtService, sessionRepo)
@@ -128,7 +127,6 @@ func main() {
 		updateCredentialsUseCase,
 		assignRolesUseCase,
 		verifyMFAUseCase,
-		mfaService,
 		userRepo,
 		sessionRepo,
 		roleRepo,

@@ -14,16 +14,12 @@ func NewListRolesUseCase(roleRepo domain.RoleRepository) *ListRolesUseCase {
 	return &ListRolesUseCase{roleRepo: roleRepo}
 }
 
-type ListRolesRequest struct {
-	Category string
-}
-
 type ListRolesResponse struct {
 	Roles []RoleResponse
 }
 
 func (uc *ListRolesUseCase) Execute(ctx context.Context, req ListRolesRequest) (*ListRolesResponse, error) {
-	roles, err := uc.roleRepo.List(ctx, req.Category)
+	roles, err := uc.roleRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}

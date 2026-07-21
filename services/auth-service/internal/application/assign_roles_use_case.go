@@ -8,10 +8,10 @@ import (
 )
 
 type AssignRolesUseCase struct {
-	userRepo      domain.UserRepository
-	roleRepo      domain.RoleRepository
-	userRoleRepo  domain.UserRoleRepository
-	permResolver  domain.PermissionResolver
+	userRepo     domain.UserRepository
+	roleRepo     domain.RoleRepository
+	userRoleRepo domain.UserRoleRepository
+	permResolver domain.PermissionResolver
 }
 
 func NewAssignRolesUseCase(
@@ -21,10 +21,10 @@ func NewAssignRolesUseCase(
 	permResolver domain.PermissionResolver,
 ) *AssignRolesUseCase {
 	return &AssignRolesUseCase{
-		userRepo:      userRepo,
-		roleRepo:      roleRepo,
-		userRoleRepo:  userRoleRepo,
-		permResolver:  permResolver,
+		userRepo:     userRepo,
+		roleRepo:     roleRepo,
+		userRoleRepo: userRoleRepo,
+		permResolver: permResolver,
 	}
 }
 
@@ -49,31 +49,40 @@ func (uc *AssignRolesUseCase) Execute(
 
 	// Validate add role IDs exist
 	if len(addRoleIDs) > 0 {
-		roles, err := uc.roleRepo.GetByIDs(ctx, addRoleIDs)
+		roles, err := uc.roleRepo.List(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if len(roles) != len(addRoleIDs) {
-			return nil, domain.ErrRoleNotFound
+
+		roleMap := make(map[uuid.UUID]domain.Role)
+		for _, r := range roles {
+			roleMap[r.ID] = r
 		}
-		// Check tenant matches
-		for _, role := range roles {
-			if role.TenantID != user.TenantID {
-				return nil, domain.ErrRoleTenantMismatch
+
+		for _, roleID := range addRoleIDs {
+			if _, ok := roleMap[roleID]; !ok {
+				return nil, domain.ErrRoleNotFound
 			}
 		}
 	}
 
 	// Add roles
 	for _, roleID := range addRoleIDs {
-		if err := uc.userRoleRepo.Add(ctx, userID, roleID); err != nil {
+		ur := &domain.UserRole{
+			UserID:     userID,
+			RoleID:     roleID,
+			TenantID:   user.TenantID,
+			AssignedBy: userID, // TODO: get actual assigner from context
+		}
+
+		if err := uc.userRoleRepo.Assign(ctx, ur); err != nil {
 			return nil, err
 		}
 	}
 
 	// Remove roles
 	for _, roleID := range removeRoleIDs {
-		if err := uc.userRoleRepo.Remove(ctx, userID, roleID); err != nil {
+		if err := uc.userRoleRepo.Revoke(ctx, userID, roleID, user.TenantID); err != nil {
 			return nil, err
 		}
 	}
@@ -84,13 +93,19 @@ func (uc *AssignRolesUseCase) Execute(
 	}
 
 	// Get updated user roles
-	userRoles, err := uc.userRoleRepo.GetByUserID(ctx, userID)
+	userRoles, err := uc.userRoleRepo.GetByUser(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
+	// Convert to []*domain.UserRole
+	userRolesPtr := make([]*domain.UserRole, len(userRoles))
+	for i := range userRoles {
+		userRolesPtr[i] = &userRoles[i]
+	}
+
 	return &AssignRolesResult{
 		Success:   true,
-		UserRoles: userRoles,
+		UserRoles: userRolesPtr,
 	}, nil
 }

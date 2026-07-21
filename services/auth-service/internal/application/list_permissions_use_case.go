@@ -14,11 +14,6 @@ func NewListPermissionsUseCase(permRepo domain.PermissionRepository) *ListPermis
 	return &ListPermissionsUseCase{permRepo: permRepo}
 }
 
-type ListPermissionsRequest struct {
-	Category string
-	Resource string
-}
-
 type ListPermissionsResponse struct {
 	Permissions []PermissionResponse
 }

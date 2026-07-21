@@ -10,7 +10,6 @@ import (
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
-	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/mfa"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/redis"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/validation"
@@ -30,7 +29,6 @@ type AuthService struct {
 	updateCredentialsUseCase *application.UpdateCredentialsUseCase
 	assignRolesUseCase       *application.AssignRolesUseCase
 	verifyMFAUseCase         *application.VerifyMFAChallengeUseCase
-	mfaService               *mfa.MFAService
 	userRepo                 *postgres.UserRepository
 	sessionRepo              *postgres.SessionRepository
 	roleRepo                 *postgres.RoleRepository
@@ -48,7 +46,6 @@ func NewAuthService(
 	updateCredentialsUseCase *application.UpdateCredentialsUseCase,
 	assignRolesUseCase *application.AssignRolesUseCase,
 	verifyMFAUseCase *application.VerifyMFAChallengeUseCase,
-	mfaService *mfa.MFAService,
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
 	roleRepo *postgres.RoleRepository,
@@ -65,7 +62,6 @@ func NewAuthService(
 		updateCredentialsUseCase: updateCredentialsUseCase,
 		assignRolesUseCase:       assignRolesUseCase,
 		verifyMFAUseCase:         verifyMFAUseCase,
-		mfaService:               mfaService,
 		userRepo:                 userRepo,
 		sessionRepo:              sessionRepo,
 		roleRepo:                 roleRepo,
@@ -371,7 +367,7 @@ func (s *AuthService) AssignRoles(ctx context.Context, req *authv1.AssignRolesRe
 			userRoles = append(userRoles, &authv1.UserRole{
 				RoleId:   role.ID.String(),
 				Name:     role.Name,
-				TenantId: role.TenantID.String(),
+				TenantId: ur.TenantID.String(),
 			})
 		}
 	}
@@ -382,40 +378,7 @@ func (s *AuthService) AssignRoles(ctx context.Context, req *authv1.AssignRolesRe
 	}, nil
 }
 
-// 8a. InitiateMFAChallenge - Start MFA challenge (returns challenge_id + TOTP secret/QR for enrollment)
-func (s *AuthService) InitiateMFAChallenge(ctx context.Context, req *authv1.InitiateMFAChallengeRequest) (*authv1.InitiateMFAChallengeResponse, error) {
-	if req.UserId == "" {
-		return nil, status.Error(codes.InvalidArgument, "user_id is required")
-	}
-	if req.MfaType == "" {
-		req.MfaType = "totp"
-	}
-
-	userID, err := uuid.Parse(req.UserId)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, "invalid user_id")
-	}
-
-	mfaType := domain.MFAType(req.MfaType)
-	challenge, secret, qrCode, err := s.mfaService.InitiateChallenge(ctx, userID, mfaType)
-	if err != nil {
-		switch err {
-		case mfa.ErrInvalidMFAType:
-			return nil, status.Error(codes.InvalidArgument, err.Error())
-		default:
-			return nil, status.Error(codes.Internal, "failed to initiate MFA challenge")
-		}
-	}
-
-	return &authv1.InitiateMFAChallengeResponse{
-		ChallengeId: challenge.ID,
-		MfaType:     string(challenge.MFAType),
-		TotpSecret:  secret,
-		TotpQrCode:  qrCode,
-	}, nil
-}
-
-// 8b. VerifyMFAChallenge - TOTP/WebAuthn verification
+// 8. VerifyMFAChallenge - TOTP/WebAuthn verification
 func (s *AuthService) VerifyMFAChallenge(ctx context.Context, req *authv1.VerifyMFAChallengeRequest) (*authv1.VerifyMFAChallengeResponse, error) {
 	if req.UserId == "" || req.Code == "" || req.ChallengeId == "" {
 		return nil, status.Error(codes.InvalidArgument, "user_id, code, and challenge_id are required")
@@ -429,10 +392,8 @@ func (s *AuthService) VerifyMFAChallenge(ctx context.Context, req *authv1.Verify
 	result, err := s.verifyMFAUseCase.Execute(ctx, userID, req.ChallengeId, req.Code)
 	if err != nil {
 		switch err {
-		case domain.ErrMFAInvalidCode, mfa.ErrInvalidCode:
+		case domain.ErrMFAInvalidCode:
 			return &authv1.VerifyMFAChallengeResponse{Verified: false}, nil
-		case mfa.ErrChallengeNotFound, mfa.ErrChallengeExpired:
-			return nil, status.Error(codes.NotFound, err.Error())
 		default:
 			return nil, status.Error(codes.Internal, "MFA verification failed")
 		}
@@ -471,7 +432,7 @@ func (s *AuthService) GetEffectivePermissions(ctx context.Context, req *authv1.G
 
 	return &authv1.GetEffectivePermissionsResponse{
 		Permissions: permissions,
-		Roles:       s.domainRolesToProto(user.Roles),
+		Roles:       s.domainRolesToProto(user.Roles, user.TenantID),
 	}, nil
 }
 
@@ -487,24 +448,31 @@ func (s *AuthService) domainUserToProto(user *domain.User) *authv1.UserInfo {
 	if user == nil {
 		return nil
 	}
+	var orgID, hospID string
+	if user.OrganizationID != nil {
+		orgID = user.OrganizationID.String()
+	}
+	if user.HospitalID != nil {
+		hospID = user.HospitalID.String()
+	}
 	return &authv1.UserInfo{
 		Id:             user.ID.String(),
 		Username:       user.Username,
 		Email:          user.Email,
 		TenantId:       user.TenantID.String(),
-		OrganizationId: user.OrganizationID.String(),
-		HospitalId:     user.HospitalID.String(),
-		Roles:          s.domainRolesToProto(user.Roles),
+		OrganizationId: orgID,
+		HospitalId:     hospID,
+		Roles:          s.domainRolesToProto(user.Roles, user.TenantID),
 	}
 }
 
-func (s *AuthService) domainRolesToProto(roles []domain.Role) []*authv1.UserRole {
+func (s *AuthService) domainRolesToProto(roles []domain.Role, tenantID uuid.UUID) []*authv1.UserRole {
 	protoRoles := make([]*authv1.UserRole, len(roles))
 	for i, r := range roles {
 		protoRoles[i] = &authv1.UserRole{
 			RoleId:   r.ID.String(),
 			Name:     r.Name,
-			TenantId: r.TenantID.String(),
+			TenantId: tenantID.String(),
 		}
 	}
 	return protoRoles

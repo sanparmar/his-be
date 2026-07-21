@@ -116,7 +116,11 @@ func (r *RoleRepository) GetInheritedRoles(ctx context.Context, roleID uuid.UUID
 	return roles, nil
 }
 
-func (r *RoleRepository) List(ctx context.Context, category string) ([]domain.Role, error) {
+func (r *RoleRepository) List(ctx context.Context) ([]domain.Role, error) {
+	return r.listByCategory(ctx, "")
+}
+
+func (r *RoleRepository) listByCategory(ctx context.Context, category string) ([]domain.Role, error) {
 	query := `
 		SELECT id, name, display_name, category, parent_role_id, is_system, description
 		FROM roles
@@ -143,6 +147,10 @@ func (r *RoleRepository) List(ctx context.Context, category string) ([]domain.Ro
 		roles = append(roles, role)
 	}
 	return roles, nil
+}
+
+func (r *RoleRepository) ListByCategory(ctx context.Context, category string) ([]domain.Role, error) {
+	return r.listByCategory(ctx, category)
 }
 
 func (r *RoleRepository) Create(ctx context.Context, role *domain.Role) error {
@@ -198,4 +206,37 @@ func (r *RoleRepository) RevokePermission(ctx context.Context, roleID, permissio
 		return fmt.Errorf("failed to revoke permission from role: %w", err)
 	}
 	return nil
+}
+
+func (r *RoleRepository) AddPermission(ctx context.Context, roleID, permID uuid.UUID) error {
+	return r.AssignPermission(ctx, roleID, permID)
+}
+
+func (r *RoleRepository) RemovePermission(ctx context.Context, roleID, permID uuid.UUID) error {
+	return r.RevokePermission(ctx, roleID, permID)
+}
+
+func (r *RoleRepository) GetPermissions(ctx context.Context, roleID uuid.UUID) ([]domain.Permission, error) {
+	query := `
+		SELECT p.id, p.name, p.resource, p.action, p.scope, p.category, p.description
+		FROM permissions p
+		JOIN role_permissions rp ON p.id = rp.permission_id
+		WHERE rp.role_id = $1
+		ORDER BY p.category, p.resource, p.action
+	`
+	rows, err := r.db.Pool.Query(ctx, query, roleID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get role permissions: %w", err)
+	}
+	defer rows.Close()
+
+	var perms []domain.Permission
+	for rows.Next() {
+		var perm domain.Permission
+		if err := rows.Scan(&perm.ID, &perm.Name, &perm.Resource, &perm.Action, &perm.Scope, &perm.Category, &perm.Description); err != nil {
+			return nil, fmt.Errorf("failed to scan permission: %w", err)
+		}
+		perms = append(perms, perm)
+	}
+	return perms, nil
 }

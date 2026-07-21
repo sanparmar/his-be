@@ -7,17 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type AssignRoleRequest struct {
-	UserID         uuid.UUID  `json:"user_id" validate:"required"`
-	RoleID         uuid.UUID  `json:"role_id" validate:"required"`
-	TenantID       uuid.UUID  `json:"tenant_id" validate:"required"`
-	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`
-	HospitalID     *uuid.UUID `json:"hospital_id,omitempty"`
-	DepartmentID   *uuid.UUID `json:"department_id,omitempty"`
-	AssignedBy     uuid.UUID  `json:"assigned_by" validate:"required"`
-	ExpiresAt      *string    `json:"expires_at,omitempty"`
-}
-
 type AssignRoleUseCase struct {
 	userRoleRepo domain.UserRoleRepository
 	roleRepo     domain.RoleRepository

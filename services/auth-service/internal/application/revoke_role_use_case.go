@@ -4,14 +4,7 @@ import (
 	"context"
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
-	"github.com/google/uuid"
 )
-
-type RevokeRoleRequest struct {
-	UserID   uuid.UUID `json:"user_id" validate:"required"`
-	RoleID   uuid.UUID `json:"role_id" validate:"required"`
-	TenantID uuid.UUID `json:"tenant_id" validate:"required"`
-}
 
 type RevokeRoleUseCase struct {
 	userRoleRepo domain.UserRoleRepository

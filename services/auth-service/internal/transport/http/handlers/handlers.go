@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/application"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/middleware"
 )
 
 type AuthHandler struct {
@@ -111,14 +113,27 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	roles := make([]string, len(user.Roles))
+	for i, r := range user.Roles {
+		roles[i] = r.Name
+	}
+
+	var orgID, hospID uuid.UUID
+	if user.OrganizationID != nil {
+		orgID = *user.OrganizationID
+	}
+	if user.HospitalID != nil {
+		hospID = *user.HospitalID
+	}
+
 	resp := application.UserResponse{
 		ID:             user.ID,
 		Username:       user.Username,
 		Email:          user.Email,
 		TenantID:       user.TenantID,
-		OrganizationID: user.OrganizationID,
-		HospitalID:     user.HospitalID,
-		Roles:          user.Roles,
+		OrganizationID: orgID,
+		HospitalID:     hospID,
+		Roles:          roles,
 		Permissions:    user.Permissions,
 	}
 

@@ -43,6 +43,14 @@ func NewJWTService(accessSecret, refreshSecret string) *JWTService {
 func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, roles []string, permissions []string, permVersion int64) (*domain.TokenPair, error) {
 	now := time.Now()
 
+	var orgID, hospID uuid.UUID
+	if user.OrganizationID != nil {
+		orgID = *user.OrganizationID
+	}
+	if user.HospitalID != nil {
+		hospID = *user.HospitalID
+	}
+
 	accessClaims := CustomClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID.String(),
@@ -51,8 +59,8 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, r
 		},
 		UserID:         user.ID,
 		TenantID:       user.TenantID,
-		OrganizationID: user.OrganizationID,
-		HospitalID:     user.HospitalID,
+		OrganizationID: orgID,
+		HospitalID:     hospID,
 		Username:       user.Username,
 		Roles:          roles,
 		Permissions:    permissions,
@@ -106,9 +114,9 @@ func (s *JWTService) ValidateAccessToken(ctx context.Context, tokenStr string) (
 		ID:             claims.UserID,
 		Username:       claims.Username,
 		TenantID:       claims.TenantID,
-		OrganizationID: claims.OrganizationID,
-		HospitalID:     claims.HospitalID,
-		Roles:          claims.Roles,
+		OrganizationID: &claims.OrganizationID,
+		HospitalID:     &claims.HospitalID,
+		Roles:          rolesFromStrings(claims.Roles),
 		Permissions:    claims.Permissions,
 		PermVersion:    claims.PermVersion,
 	}, nil
@@ -134,7 +142,15 @@ func (s *JWTService) ValidateRefreshToken(ctx context.Context, tokenStr string) 
 	return &domain.User{
 		ID:             claims.UserID,
 		TenantID:       claims.TenantID,
-		OrganizationID: claims.OrganizationID,
-		HospitalID:     claims.HospitalID,
+		OrganizationID: &claims.OrganizationID,
+		HospitalID:     &claims.HospitalID,
 	}, nil
+}
+
+func rolesFromStrings(names []string) []domain.Role {
+	roles := make([]domain.Role, len(names))
+	for i, n := range names {
+		roles[i] = domain.Role{Name: n}
+	}
+	return roles
 }

@@ -160,7 +160,11 @@ func GetUserRoles(ctx context.Context) []string {
 	if user == nil {
 		return nil
 	}
-	return user.Roles
+	roles := make([]string, len(user.Roles))
+	for i, r := range user.Roles {
+		roles[i] = r.Name
+	}
+	return roles
 }
 
 func HasPermission(ctx context.Context, perm string) bool {

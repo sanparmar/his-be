@@ -4,24 +4,6 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	ScopeOwn         = "own"
-	ScopeDepartment  = "department"
-	ScopeHospital    = "hospital"
-	ScopeOrganization = "organization"
-	ScopeTenant      = "tenant"
-	ScopeAll         = "all"
-)
-
-var scopeLevels = map[string]int{
-	ScopeOwn:         0,
-	ScopeDepartment:  1,
-	ScopeHospital:    2,
-	ScopeOrganization: 3,
-	ScopeTenant:      4,
-	ScopeAll:         5,
-}
-
 type UserContext struct {
 	UserID          uuid.UUID
 	TenantID        uuid.UUID
@@ -54,17 +36,17 @@ func (e *ScopeEvaluator) CanAccessResource(userCtx *UserContext, resourceCtx *Re
 	requiredLevel := perm.ScopeLevel()
 
 	switch requiredLevel {
-	case scopeLevels[ScopeOwn]:
+	case 0: // ScopeOwn
 		return e.checkOwnScope(userCtx, resourceCtx)
-	case scopeLevels[ScopeDepartment]:
+	case 1: // ScopeDepartment
 		return e.checkDepartmentScope(userCtx, resourceCtx)
-	case scopeLevels[ScopeHospital]:
+	case 2: // ScopeHospital
 		return e.checkHospitalScope(userCtx, resourceCtx)
-	case scopeLevels[ScopeOrganization]:
+	case 3: // ScopeOrganization
 		return e.checkOrganizationScope(userCtx, resourceCtx)
-	case scopeLevels[ScopeTenant]:
+	case 4: // ScopeTenant
 		return e.checkTenantScope(userCtx, resourceCtx)
-	case scopeLevels[ScopeAll]:
+	case 5: // ScopeAll
 		return true
 	default:
 		return false
@@ -112,19 +94,19 @@ func (e *ScopeEvaluator) isAssignedPatient(userCtx *UserContext, patientID uuid.
 
 func (e *ScopeEvaluator) GetEffectiveScope(userCtx *UserContext, resourceCtx *ResourceContext) string {
 	if e.checkOwnScope(userCtx, resourceCtx) {
-		return ScopeOwn
+		return "own"
 	}
 	if e.checkDepartmentScope(userCtx, resourceCtx) {
-		return ScopeDepartment
+		return "department"
 	}
 	if e.checkHospitalScope(userCtx, resourceCtx) {
-		return ScopeHospital
+		return "hospital"
 	}
 	if e.checkOrganizationScope(userCtx, resourceCtx) {
-		return ScopeOrganization
+		return "organization"
 	}
 	if e.checkTenantScope(userCtx, resourceCtx) {
-		return ScopeTenant
+		return "tenant"
 	}
-	return ScopeAll
+	return "all"
 }

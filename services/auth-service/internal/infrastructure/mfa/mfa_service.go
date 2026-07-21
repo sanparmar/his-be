@@ -12,7 +12,6 @@ import (
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 	"github.com/google/uuid"
-	"github.com/pquerna/otp/totp"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -69,11 +68,6 @@ func (s *MFAService) InitiateChallenge(ctx context.Context, userID uuid.UUID, mf
 	secret, err := s.totpService.GenerateSecret("user@" + Issuer)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("failed to generate TOTP secret: %w", err)
-	}
-
-	expectedCode, err := s.totpService.GenerateCurrentCode(secret)
-	if err != nil {
-		return nil, "", "", fmt.Errorf("failed to generate TOTP code: %w", err)
 	}
 
 	challenge := &MFAChallenge{
@@ -156,7 +150,7 @@ func (s *MFAService) HashBackupCodes(codes []string) ([]string, error) {
 }
 
 func (s *MFAService) VerifyBackupCode(hashedCodes []string, providedCode string) (bool, []string, error) {
-	for i, hash := range hashedCodes {
+	for _, hash := range hashedCodes {
 		err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(providedCode))
 		if err == nil {
 			return true, hashedCodes, nil

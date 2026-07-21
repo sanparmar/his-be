@@ -4,19 +4,10 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/base64"
-	"fmt"
 	"image/png"
 	"time"
 
 	"github.com/pquerna/otp/totp"
-)
-
-const (
-	Issuer      = "HIS"
-	Digits      = 6
-	Period      = 30
-	BackupCodes = 8
-	CodeLength  = 10
 )
 
 type TOTPService struct{}
@@ -70,13 +61,13 @@ func (s *TOTPService) VerifyCode(secret, code string) bool {
 }
 
 func (s *TOTPService) GenerateBackupCodes() ([]string, error) {
-	codes := make([]string, BackupCodes)
-	for i := 0; i < BackupCodes; i++ {
-		b := make([]byte, CodeLength/2)
+	codes := make([]string, BackupCodeCount)
+	for i := 0; i < BackupCodeCount; i++ {
+		b := make([]byte, BackupCodeLen/2)
 		if _, err := rand.Read(b); err != nil {
 			return nil, err
 		}
-		codes[i] = base64.StdEncoding.EncodeToString(b)[:CodeLength]
+		codes[i] = base64.StdEncoding.EncodeToString(b)[:BackupCodeLen]
 	}
 	return codes, nil
 }

@@ -21,6 +21,55 @@ const (
 	ScopeAll         = "all"
 )
 
+const (
+	ActionRead       = "read"
+	ActionWrite      = "write"
+	ActionCreate     = "create"
+	ActionUpdate     = "update"
+	ActionDelete     = "delete"
+	ActionClose      = "close"
+	ActionApprove    = "approve"
+	ActionSign       = "sign"
+	ActionExport     = "export"
+	ActionDiscontinue = "discontinue"
+	ActionAdminister = "administer"
+	ActionDispense   = "dispense"
+	ActionCode       = "code"
+	ActionOrder      = "order"
+	ActionResultRead = "result:read"
+	ActionResultVerify = "result:verify"
+	ActionResultApprove = "result:approve"
+	ActionCollect    = "collect"
+	ActionInterpret  = "interpret"
+	ActionAssign     = "assign"
+	ActionTransfer   = "transfer"
+	ActionRelease    = "release"
+	ActionSchedule   = "schedule"
+	ActionPerform    = "perform"
+	ActionAssist     = "assist"
+	ActionAdmit      = "admit"
+	ActionManage     = "manage"
+	ActionReschedule = "reschedule"
+	ActionCancel     = "cancel"
+	ActionConduct    = "conduct"
+	ActionProcess    = "process"
+	ActionAssess     = "assess"
+	ActionDisposition = "disposition"
+	ActionPost       = "post"
+	ActionGenerate   = "generate"
+	ActionAdjust     = "adjust"
+	ActionVoid       = "void"
+	ActionSubmit     = "submit"
+	ActionAdjudicate = "adjudicate"
+	ActionRefund     = "refund"
+	ActionVerify     = "verify"
+	ActionObtain     = "obtain"
+	ActionRun        = "run"
+	ActionDeactivate = "deactivate"
+	ActionAdmin    = "admin"
+	ActionManageFormulary = "manage"
+)
+
 var validScopes = map[string]int{
 	ScopeOwn:         0,
 	ScopeDepartment:  1,
@@ -105,7 +154,6 @@ var validActions = map[string]bool{
 	"schedule":      true,
 	"perform":       true,
 	"assist":        true,
-	"administer":    true,
 	"admit":         true,
 	"manage":        true,
 	"reschedule":    true,
@@ -125,7 +173,6 @@ var validActions = map[string]bool{
 	"obtain":        true,
 	"run":           true,
 	"deactivate":    true,
-	"manage":        true,
 }
 
 type Permission struct {

@@ -1,10 +1,5 @@
 package domain
 
-import (
-	"context"
-	"github.com/google/uuid"
-)
-
 type PermissionHierarchy struct{}
 
 func NewPermissionHierarchy() *PermissionHierarchy {
@@ -34,8 +29,8 @@ func (h *PermissionHierarchy) Implies(has, needs string) bool {
 }
 
 func (h *PermissionHierarchy) ImpliesAll(has []string, needs string) bool {
-	for _, h := range has {
-		if h.Implies(needs) {
+	for _, perm := range has {
+		if h.Implies(perm, needs) {
 			return true
 		}
 	}
@@ -63,26 +58,18 @@ func impliesAction(has, needs string) bool {
 		ActionClose:    2,
 		ActionCancel:   1,
 		ActionReschedule: 1,
-		ActionApproveAppointment: 2,
 		ActionProcess:  1,
 		ActionAssess:   1,
-		ActionAssign:   2,
 		ActionDisposition: 2,
-		ActionManageFastTrack: 2,
 		ActionPost:     1,
 		ActionAdjust:   2,
 		ActionVoid:     3,
-		ActionCreate:   1,
 		ActionSubmit:   2,
 		ActionAdjudicate: 3,
-		ActionPostPayment: 2,
-		ActionRefund:   3,
-		ActionVerify:   2,
 		ActionObtain:   2,
 		ActionRun:      1,
 		ActionAdmin:    3,
 		ActionDeactivate: 2,
-		ActionManageFormulary: 3,
 	}
 	return hierarchy[has] >= hierarchy[needs]
 }
@@ -104,7 +91,6 @@ func (h *PermissionHierarchy) ExpandPermissions(perms []string) []string {
 			ActionApprove: 3,
 			ActionSign:    2,
 			ActionExport:  2,
-			ActionManage:  3,
 			ActionAssign:  2,
 			ActionVerify:  2,
 		} {

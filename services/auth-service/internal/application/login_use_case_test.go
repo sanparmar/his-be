@@ -23,7 +23,6 @@ func TestLoginUseCase_Execute_Success(t *testing.T) {
 		TenantID:       uuid.New(),
 		OrganizationID: uuidPtr(uuid.New()),
 		HospitalID:     uuidPtr(uuid.New()),
-		DepartmentID:   uuidPtr(uuid.New()),
 		Roles:          []domain.Role{{Name: "doctor"}},
 	}
 
@@ -132,7 +131,6 @@ func TestLoginUseCase_Execute_ResolvesPermissions(t *testing.T) {
 		TenantID:       uuid.New(),
 		OrganizationID: uuidPtr(uuid.New()),
 		HospitalID:     uuidPtr(uuid.New()),
-		DepartmentID:   uuidPtr(uuid.New()),
 		Roles:          []domain.Role{{Name: "doctor"}},
 	}
 

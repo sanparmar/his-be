@@ -81,12 +81,17 @@ func main() {
 	permRepo := postgres.NewPermissionRepository(db)
 
 	// MFA Service
-	mfaService := mfa.NewMFAService(mfa.NewTOTPService(), redisClient.Client)
+	var mfaService *mfa.MFAService
+	if redisClient != nil {
+		mfaService = mfa.NewMFAService(mfa.NewTOTPService(), redisClient.Client)
+	} else {
+		mfaService = mfa.NewMFAService(mfa.NewTOTPService(), nil)
+	}
 
 	// Use Cases
 	permResolver := application.NewPermissionResolver(userRoleRepo, roleRepo, permRepo, permCache)
 	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
-	refreshUseCase := application.NewRefreshUseCase(sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
+	refreshUseCase := application.NewRefreshUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
 	logoutUseCase := application.NewLogoutUseCase(sessionRepo)
 	meUseCase := application.NewMeUseCase(jwtService)
 	provisionIdentityUseCase := application.NewProvisionIdentityUseCase(userRepo, sessionRepo, jwtService)
@@ -130,6 +135,7 @@ func main() {
 		userRepo,
 		sessionRepo,
 		roleRepo,
+		userRoleRepo,
 		jwtService,
 		revocationStore,
 		permResolver,

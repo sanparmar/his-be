@@ -64,7 +64,7 @@ func main() {
 	permResolver := application.NewPermissionResolver(userRoleRepo, roleRepo, permRepo, permCache)
 
 	loginUseCase := application.NewLoginUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
-	refreshUseCase := application.NewRefreshUseCase(sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
+	refreshUseCase := application.NewRefreshUseCase(userRepo, sessionRepo, jwtService, permResolver, userRoleRepo, roleRepo)
 	logoutUseCase := application.NewLogoutUseCase(sessionRepo)
 	meUseCase := application.NewMeUseCase(jwtService)
 

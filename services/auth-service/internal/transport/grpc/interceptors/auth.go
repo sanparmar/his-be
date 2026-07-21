@@ -85,6 +85,7 @@ func GetTenantID(ctx context.Context) (uuid.UUID, bool) {
 func isPublicMethod(method string) bool {
 	publicMethods := map[string]bool{
 		"/auth.v1.AuthService/AuthenticateCredentials": true,
+		"/auth.v1.AuthService/RefreshSession":          true,
 		"/auth.v1.AuthService/ProvisionIdentity":       true,
 		"/auth.v1.AuthService/InitiateMFAChallenge":    true,
 		"/auth.v1.AuthService/VerifyMFAChallenge":      true,

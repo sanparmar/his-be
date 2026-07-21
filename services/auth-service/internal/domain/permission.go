@@ -185,17 +185,33 @@ type Permission struct {
 	Description string `json:"description" db:"description"`
 }
 
+// ParsePermission accepts both the stored `resource:action` name format
+// (his-be's seeded permissions.name column — scope lives in its own DB
+// column, never appended to name) and an explicit `resource:action:scope`
+// form. A bare `resource:action` string defaults to the most restrictive
+// scope (own) since no scope is available to parse. Some actions are
+// themselves compound (e.g. "result:approve" for lab/rad permissions), so
+// the whole remainder is tried as the action first before assuming a
+// trailing scope segment.
 func ParsePermission(s string) (*Permission, error) {
-	parts := strings.Split(s, ":")
-	if len(parts) != 3 {
+	firstColon := strings.Index(s, ":")
+	if firstColon < 0 || firstColon == len(s)-1 {
 		return nil, ErrInvalidPermissionFormat
 	}
-
-	resource, action, scope := parts[0], parts[1], parts[2]
+	resource := s[:firstColon]
+	rest := s[firstColon+1:]
 
 	if !validResources[resource] {
 		return nil, ErrInvalidResource
 	}
+
+	action, scope := rest, ScopeOwn
+	if !validActions[action] {
+		if lastColon := strings.LastIndex(rest, ":"); lastColon >= 0 {
+			action, scope = rest[:lastColon], rest[lastColon+1:]
+		}
+	}
+
 	if !validActions[action] {
 		return nil, ErrInvalidAction
 	}

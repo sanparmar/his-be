@@ -32,6 +32,7 @@ type AuthService struct {
 	userRepo                 *postgres.UserRepository
 	sessionRepo              *postgres.SessionRepository
 	roleRepo                 *postgres.RoleRepository
+	userRoleRepo             *postgres.UserRoleRepository
 	jwtService               *jwt.JWTService
 	revocationStore          *redis.TokenRevocationStore
 	permResolver             domain.PermissionResolver
@@ -49,6 +50,7 @@ func NewAuthService(
 	userRepo *postgres.UserRepository,
 	sessionRepo *postgres.SessionRepository,
 	roleRepo *postgres.RoleRepository,
+	userRoleRepo *postgres.UserRoleRepository,
 	jwtService *jwt.JWTService,
 	revocationStore *redis.TokenRevocationStore,
 	permResolver domain.PermissionResolver,
@@ -65,18 +67,39 @@ func NewAuthService(
 		userRepo:                 userRepo,
 		sessionRepo:              sessionRepo,
 		roleRepo:                 roleRepo,
+		userRoleRepo:             userRoleRepo,
 		jwtService:               jwtService,
 		revocationStore:          revocationStore,
 		permResolver:             permResolver,
 	}
 }
 
+// loadUserRoles resolves a user's active roles via user_roles/roles directly
+// — domain.User.Roles is never populated by UserRepository (it only reads
+// the users table), so every caller that needs roles alongside user info
+// must resolve them this way instead (same pattern login_use_case.go and
+// refresh_use_case.go already use for JWT claims).
+func (s *AuthService) loadUserRoles(ctx context.Context, userID, tenantID uuid.UUID) []domain.Role {
+	if s.userRoleRepo == nil {
+		return nil
+	}
+	userRoles, err := s.userRoleRepo.GetActiveByUserAndTenant(ctx, userID, tenantID)
+	if err != nil {
+		return nil
+	}
+	roles := make([]domain.Role, 0, len(userRoles))
+	for _, ur := range userRoles {
+		role, err := s.roleRepo.GetByID(ctx, ur.RoleID)
+		if err == nil && role != nil {
+			roles = append(roles, *role)
+		}
+	}
+	return roles
+}
+
 // 1. AuthenticateCredentials - Exchange credentials for JWT/Refresh token
 func (s *AuthService) AuthenticateCredentials(ctx context.Context, req *authv1.AuthenticateCredentialsRequest) (*authv1.AuthenticateCredentialsResponse, error) {
 	if err := validation.ValidateUsername(req.Username); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	if err := validation.ValidatePassword(req.Password); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	if err := validation.ValidateOptionalUUID(req.TenantId, "tenant_id"); err != nil {
@@ -97,6 +120,7 @@ func (s *AuthService) AuthenticateCredentials(ctx context.Context, req *authv1.A
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to get user info")
 	}
+	user.Roles = s.loadUserRoles(ctx, user.ID, user.TenantID)
 
 	return &authv1.AuthenticateCredentialsResponse{
 		AccessToken:  tokenPair.AccessToken,
@@ -148,6 +172,7 @@ func (s *AuthService) ValidateSession(ctx context.Context, req *authv1.ValidateS
 	if user == nil {
 		return &authv1.ValidateSessionResponse{Valid: false}, nil
 	}
+	user.Roles = s.loadUserRoles(ctx, user.ID, user.TenantID)
 
 	permissions, err := s.permResolver.GetEffectivePermissions(ctx, user.ID, user.TenantID)
 	if err != nil {
@@ -429,6 +454,7 @@ func (s *AuthService) GetEffectivePermissions(ctx context.Context, req *authv1.G
 	if err != nil {
 		return nil, status.Error(codes.Internal, "failed to get effective permissions")
 	}
+	user.Roles = s.loadUserRoles(ctx, user.ID, user.TenantID)
 
 	return &authv1.GetEffectivePermissionsResponse{
 		Permissions: permissions,

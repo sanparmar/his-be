@@ -2,7 +2,6 @@ package grpc
 
 import (
 	"context"
-	"time"
 
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/jwt"
 	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/infrastructure/postgres"
@@ -29,18 +28,15 @@ func NewAuthValidatorImpl(jwtService *jwt.JWTService, sessionRepo *postgres.Sess
 
 // ValidateToken implements AuthValidator
 func (v *AuthValidatorImpl) ValidateToken(ctx context.Context, token string) (string, uuid.UUID, error) {
+	// Access tokens are short-lived, stateless JWTs: validity rests on
+	// signature + expiry here. Sessions are keyed by refresh token (see
+	// login_use_case.go), not access token, so there is no session row to
+	// look up for an access token — explicit access-token revocation is
+	// handled separately via the Redis revocation list (see
+	// ValidateSession/RevokeSession in transport/grpc/handlers.go).
 	user, err := v.jwtService.ValidateAccessToken(ctx, token)
 	if err != nil {
 		return "", uuid.Nil, err
-	}
-
-	// Check session in database
-	session, err := v.sessionRepo.GetByToken(ctx, token)
-	if err != nil {
-		return "", uuid.Nil, err
-	}
-	if session == nil || session.ExpiresAt.Before(time.Now()) {
-		return "", uuid.Nil, jwt.ErrInvalidToken
 	}
 
 	return user.ID.String(), user.TenantID, nil

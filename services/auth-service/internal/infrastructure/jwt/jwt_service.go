@@ -53,6 +53,7 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, r
 
 	accessClaims := CustomClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			Subject:   user.ID.String(),
 			ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -73,6 +74,7 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, r
 	}
 
 	refreshClaims := jwt.RegisteredClaims{
+		ID:        uuid.New().String(),
 		Subject:   user.ID.String(),
 		ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(now),
@@ -139,11 +141,19 @@ func (s *JWTService) ValidateRefreshToken(ctx context.Context, tokenStr string) 
 		return nil, ErrInvalidToken
 	}
 
+	// Refresh tokens are signed with only jwt.RegisteredClaims (see
+	// GenerateTokenPair) — claims.UserID/TenantID/etc. are never set on
+	// them and would silently decode as zero values. The one real piece
+	// of identity on a refresh token is its Subject (user ID). Callers
+	// that need the full user record (tenant, org, hospital, ...) must
+	// look it up separately by this ID.
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
 	return &domain.User{
-		ID:             claims.UserID,
-		TenantID:       claims.TenantID,
-		OrganizationID: &claims.OrganizationID,
-		HospitalID:     &claims.HospitalID,
+		ID: userID,
 	}, nil
 }
 

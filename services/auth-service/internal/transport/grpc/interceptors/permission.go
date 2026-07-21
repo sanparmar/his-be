@@ -20,7 +20,7 @@ type PermissionResolver interface {
 // rpcToPermission maps gRPC method names to required permissions
 var rpcToPermission = map[string]string{
 	"/auth.v1.AuthService/AssignRoles":             "role:assign",
-	"/auth.v1.AuthService/GetEffectivePermissions": "permission:read",
+	"/auth.v1.AuthService/GetEffectivePermissions": "user:read",
 }
 
 // isProtectedMethod checks if a method requires permission check

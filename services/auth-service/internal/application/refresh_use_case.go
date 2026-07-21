@@ -10,6 +10,7 @@ import (
 )
 
 type RefreshUseCase struct {
+	userRepo     domain.UserRepository
 	sessionRepo  domain.SessionRepository
 	tokenService domain.TokenService
 	permResolver domain.PermissionResolver
@@ -18,6 +19,7 @@ type RefreshUseCase struct {
 }
 
 func NewRefreshUseCase(
+	userRepo domain.UserRepository,
 	sessionRepo domain.SessionRepository,
 	tokenService domain.TokenService,
 	permResolver domain.PermissionResolver,
@@ -25,6 +27,7 @@ func NewRefreshUseCase(
 	roleRepo domain.RoleRepository,
 ) *RefreshUseCase {
 	return &RefreshUseCase{
+		userRepo:     userRepo,
 		sessionRepo:  sessionRepo,
 		tokenService: tokenService,
 		permResolver: permResolver,
@@ -34,9 +37,20 @@ func NewRefreshUseCase(
 }
 
 func (uc *RefreshUseCase) Execute(ctx context.Context, refreshToken string) (*domain.TokenPair, error) {
-	user, err := uc.tokenService.ValidateRefreshToken(ctx, refreshToken)
+	tokenUser, err := uc.tokenService.ValidateRefreshToken(ctx, refreshToken)
 	if err != nil {
 		return nil, err
+	}
+
+	// ValidateRefreshToken only has the subject (user ID) to go on — look
+	// up the full record for tenant/org/hospital before resolving
+	// permissions or issuing new claims.
+	user, err := uc.userRepo.GetByID(ctx, tokenUser.ID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, domain.ErrUserNotFound
 	}
 
 	_ = uc.sessionRepo.Delete(ctx, refreshToken)

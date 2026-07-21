@@ -10,7 +10,7 @@ import (
 
 var (
 	emailRegex    = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]{3,50}$`)
+	usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]{3,50}$`)
 )
 
 type ValidationError struct {
@@ -40,7 +40,7 @@ func ValidateUsername(username string) error {
 		return ValidationError{Field: "username", Message: "username must be between 3 and 50 characters"}
 	}
 	if !usernameRegex.MatchString(username) {
-		return ValidationError{Field: "username", Message: "username can only contain letters, numbers, underscore, and hyphen"}
+		return ValidationError{Field: "username", Message: "username can only contain letters, numbers, dots, underscore, and hyphen"}
 	}
 	return nil
 }

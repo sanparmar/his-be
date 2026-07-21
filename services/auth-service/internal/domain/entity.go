@@ -70,7 +70,6 @@ type User struct {
 	TenantID       uuid.UUID  `json:"tenant_id" db:"tenant_id"`
 	OrganizationID *uuid.UUID `json:"organization_id,omitempty" db:"organization_id"`
 	HospitalID     *uuid.UUID `json:"hospital_id,omitempty" db:"hospital_id"`
-	DepartmentID   *uuid.UUID `json:"department_id,omitempty" db:"department_id"`
 	Roles          []Role     `json:"roles,omitempty"`
 	Permissions    []string   `json:"permissions,omitempty"`
 	PermVersion    int64      `json:"perm_version,omitempty"`

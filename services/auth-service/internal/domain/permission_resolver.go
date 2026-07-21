@@ -54,10 +54,13 @@ func (r *permissionResolver) ResolvePermissions(ctx context.Context, userID uuid
 	if r.permCache != nil {
 		cached, err := r.permCache.Get(ctx, userID, tenantID)
 		if err == nil && cached != nil {
-			perms := make([]ResolvedPermission, len(cached))
-			for i, p := range cached {
-				perm, _ := ParsePermission(p)
-				perms[i] = ResolvedPermission{Permission: *perm}
+			perms := make([]ResolvedPermission, 0, len(cached))
+			for _, p := range cached {
+				perm, err := ParsePermission(p)
+				if err != nil || perm == nil {
+					continue
+				}
+				perms = append(perms, ResolvedPermission{Permission: *perm})
 			}
 			return perms, nil
 		}
@@ -97,9 +100,17 @@ func (r *permissionResolver) ResolvePermissions(ctx context.Context, userID uuid
 	}
 
 	if r.permCache != nil {
+		// Cache the scope-qualified form (resource:action:scope) — p.Name
+		// alone (resource:action) loses the scope column, which then
+		// silently defaults to the most restrictive scope on a cache-hit
+		// re-parse (see ParsePermission) and breaks scope-gated
+		// authorization checks like HasPermission for anyone hitting a
+		// warm cache. GetEffectivePermissions re-normalizes back to
+		// resource:action before returning to callers, so the public API
+		// shape doesn't change.
 		permStrings := make([]string, len(result))
 		for i, p := range result {
-			permStrings[i] = p.Name
+			permStrings[i] = p.Name + ":" + p.Scope
 		}
 		_ = r.permCache.Set(ctx, userID, tenantID, permStrings)
 	}
@@ -163,7 +174,18 @@ func (r *permissionResolver) GetEffectivePermissions(ctx context.Context, userID
 	if r.permCache != nil {
 		cached, err := r.permCache.Get(ctx, userID, tenantID)
 		if err == nil && cached != nil {
-			return cached, nil
+			// Cached entries are scope-qualified (resource:action:scope) —
+			// normalize back to resource:action so callers see the same
+			// shape whether this hit the cache or resolved fresh from DB.
+			result := make([]string, 0, len(cached))
+			for _, c := range cached {
+				perm, err := ParsePermission(c)
+				if err != nil || perm == nil {
+					continue
+				}
+				result = append(result, perm.Resource+":"+perm.Action)
+			}
+			return result, nil
 		}
 	}
 

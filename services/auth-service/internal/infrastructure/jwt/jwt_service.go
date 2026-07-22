@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 )
 
 var (
@@ -18,11 +18,14 @@ var (
 
 type CustomClaims struct {
 	jwt.RegisteredClaims
-	UserID       uuid.UUID `json:"uid"`
-	TenantID     uuid.UUID `json:"tid"`
+	UserID         uuid.UUID `json:"uid"`
+	TenantID       uuid.UUID `json:"tid"`
 	OrganizationID uuid.UUID `json:"oid"`
-	HospitalID   uuid.UUID `json:"hid"`
-	Username     string    `json:"sub_name"`
+	HospitalID     uuid.UUID `json:"hid"`
+	Username       string    `json:"sub_name"`
+	Roles          []string  `json:"roles,omitempty"`
+	Permissions    []string  `json:"perms,omitempty"`
+	PermVersion    int64     `json:"pv,omitempty"`
 }
 
 type JWTService struct {
@@ -37,21 +40,32 @@ func NewJWTService(accessSecret, refreshSecret string) *JWTService {
 	}
 }
 
-func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User) (*domain.TokenPair, error) {
+func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User, roles []string, permissions []string, permVersion int64) (*domain.TokenPair, error) {
 	now := time.Now()
 
-	// Access Token
+	var orgID, hospID uuid.UUID
+	if user.OrganizationID != nil {
+		orgID = *user.OrganizationID
+	}
+	if user.HospitalID != nil {
+		hospID = *user.HospitalID
+	}
+
 	accessClaims := CustomClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(),
 			Subject:   user.ID.String(),
 			ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 		UserID:         user.ID,
 		TenantID:       user.TenantID,
-		OrganizationID: user.OrganizationID,
-		HospitalID:     user.HospitalID,
+		OrganizationID: orgID,
+		HospitalID:     hospID,
 		Username:       user.Username,
+		Roles:          roles,
+		Permissions:    permissions,
+		PermVersion:    permVersion,
 	}
 
 	accessToken, err := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims).SignedString(s.accessSecret)
@@ -59,8 +73,8 @@ func (s *JWTService) GenerateTokenPair(ctx context.Context, user *domain.User) (
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
-	// Refresh Token
 	refreshClaims := jwt.RegisteredClaims{
+		ID:        uuid.New().String(),
 		Subject:   user.ID.String(),
 		ExpiresAt: jwt.NewNumericDate(now.Add(7 * 24 * time.Hour)),
 		IssuedAt:  jwt.NewNumericDate(now),
@@ -102,8 +116,11 @@ func (s *JWTService) ValidateAccessToken(ctx context.Context, tokenStr string) (
 		ID:             claims.UserID,
 		Username:       claims.Username,
 		TenantID:       claims.TenantID,
-		OrganizationID: claims.OrganizationID,
-		HospitalID:     claims.HospitalID,
+		OrganizationID: &claims.OrganizationID,
+		HospitalID:     &claims.HospitalID,
+		Roles:          rolesFromStrings(claims.Roles),
+		Permissions:    claims.Permissions,
+		PermVersion:    claims.PermVersion,
 	}, nil
 }
 
@@ -124,10 +141,26 @@ func (s *JWTService) ValidateRefreshToken(ctx context.Context, tokenStr string) 
 		return nil, ErrInvalidToken
 	}
 
+	// Refresh tokens are signed with only jwt.RegisteredClaims (see
+	// GenerateTokenPair) — claims.UserID/TenantID/etc. are never set on
+	// them and would silently decode as zero values. The one real piece
+	// of identity on a refresh token is its Subject (user ID). Callers
+	// that need the full user record (tenant, org, hospital, ...) must
+	// look it up separately by this ID.
+	userID, err := uuid.Parse(claims.Subject)
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
 	return &domain.User{
-		ID:             claims.UserID,
-		TenantID:       claims.TenantID,
-		OrganizationID: claims.OrganizationID,
-		HospitalID:     claims.HospitalID,
+		ID: userID,
 	}, nil
+}
+
+func rolesFromStrings(names []string) []domain.Role {
+	roles := make([]domain.Role, len(names))
+	for i, n := range names {
+		roles[i] = domain.Role{Name: n}
+	}
+	return roles
 }

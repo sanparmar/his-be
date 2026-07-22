@@ -2,23 +2,37 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/his-platform/auth-service/internal/domain"
+	"github.com/deloitte-us-consulting/his-be/services/auth-service/internal/domain"
 )
 
 type LoginUseCase struct {
 	userRepo     domain.UserRepository
 	sessionRepo  domain.SessionRepository
 	tokenService domain.TokenService
+	permResolver domain.PermissionResolver
+	userRoleRepo domain.UserRoleRepository
+	roleRepo     domain.RoleRepository
 }
 
-func NewLoginUseCase(userRepo domain.UserRepository, sessionRepo domain.SessionRepository, tokenService domain.TokenService) *LoginUseCase {
+func NewLoginUseCase(
+	userRepo domain.UserRepository,
+	sessionRepo domain.SessionRepository,
+	tokenService domain.TokenService,
+	permResolver domain.PermissionResolver,
+	userRoleRepo domain.UserRoleRepository,
+	roleRepo domain.RoleRepository,
+) *LoginUseCase {
 	return &LoginUseCase{
 		userRepo:     userRepo,
 		sessionRepo:  sessionRepo,
 		tokenService: tokenService,
+		permResolver: permResolver,
+		userRoleRepo: userRoleRepo,
+		roleRepo:     roleRepo,
 	}
 }
 
@@ -31,12 +45,34 @@ func (uc *LoginUseCase) Execute(ctx context.Context, username, password string) 
 		return nil, domain.ErrUserNotFound
 	}
 
-	_ = password
+if err := domain.VerifyPassword(user.PasswordHash, password); err != nil {
+	return nil, domain.ErrInvalidCredentials
+}
 
-	// Password verification should be done here with bcrypt
-	// For now, we'll skip it for the purpose of structure.
+userRoles, err := uc.userRoleRepo.GetActiveByUserAndTenant(ctx, user.ID, user.TenantID)
+if err != nil {
+	return nil, err
+}
+	perms, err := uc.permResolver.ResolvePermissions(ctx, user.ID, user.TenantID)
+	if err != nil {
+		return nil, err
+	}
 
-	tokenPair, err := uc.tokenService.GenerateTokenPair(ctx, user)
+	roles := make([]string, 0, len(userRoles))
+	permStrings := make([]string, 0, len(perms))
+	for _, ur := range userRoles {
+		role, _ := uc.roleRepo.GetByID(ctx, ur.RoleID)
+		if role != nil {
+			roles = append(roles, role.Name)
+		}
+	}
+	for _, p := range perms {
+		permStrings = append(permStrings, p.Name)
+	}
+
+	permVersion := time.Now().Unix()
+
+	tokenPair, err := uc.tokenService.GenerateTokenPair(ctx, user, roles, permStrings, permVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +85,7 @@ func (uc *LoginUseCase) Execute(ctx context.Context, username, password string) 
 	}
 
 	if err := uc.sessionRepo.Create(ctx, session); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
 	return tokenPair, nil

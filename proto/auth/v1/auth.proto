@@ -1,0 +1,229 @@
+syntax = "proto3";
+
+package auth.v1;
+
+option go_package = "github.com/deloitte-us-consulting/his-be/api/auth/v1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/api/annotations.proto";
+
+service AuthService {
+  // 1. Exchange credentials for JWT/Refresh token
+  rpc AuthenticateCredentials(AuthenticateCredentialsRequest) returns (AuthenticateCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/login"
+      body: "*"
+    };
+  };
+  
+  // 2. Used by Gateway/Router to verify token state
+  rpc ValidateSession(ValidateSessionRequest) returns (ValidateSessionResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/validate"
+      body: "*"
+    };
+  };
+  
+  // 3. Silent token rotation
+  rpc RefreshSession(RefreshSessionRequest) returns (RefreshSessionResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/refresh"
+      body: "*"
+    };
+  };
+  
+  // 4. Forced logout, immediate invalidation
+  rpc RevokeSession(RevokeSessionRequest) returns (RevokeSessionResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/revoke"
+      body: "*"
+    };
+  };
+  
+  // 5. Creates the base UUID and credential record
+  rpc ProvisionIdentity(ProvisionIdentityRequest) returns (ProvisionIdentityResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/provision"
+      body: "*"
+    };
+  };
+  
+  // 6. Password changes, MFA enrolment
+  rpc UpdateCredentials(UpdateCredentialsRequest) returns (UpdateCredentialsResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/credentials"
+      body: "*"
+    };
+  };
+  
+  // 7. RBAC mapping to UUIDs
+  rpc AssignRoles(AssignRolesRequest) returns (AssignRolesResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/roles"
+      body: "*"
+    };
+  };
+  
+  // 8a. Initiate MFA challenge (returns challenge_id + TOTP secret/QR for enrollment)
+  rpc InitiateMFAChallenge(InitiateMFAChallengeRequest) returns (InitiateMFAChallengeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/mfa/initiate"
+      body: "*"
+    };
+  };
+
+  // 8b. TOTP/WebAuthn verification
+  rpc VerifyMFAChallenge(VerifyMFAChallengeRequest) returns (VerifyMFAChallengeResponse) {
+    option (google.api.http) = {
+      post: "/v1/auth/mfa/verify"
+      body: "*"
+    };
+  };
+  
+  // 9. Returns the flattened permission tree for a user
+  rpc GetEffectivePermissions(GetEffectivePermissionsRequest) returns (GetEffectivePermissionsResponse) {
+    option (google.api.http) = {
+      get: "/v1/auth/permissions/{user_id}"
+    };
+  };
+
+  // Health check
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse) {
+    option (google.api.http) = {
+      get: "/healthz"
+    };
+  };
+}
+
+// ===== Messages =====
+
+message AuthenticateCredentialsRequest {
+  string username = 1;
+  string password = 2;
+  string tenant_id = 3;
+  string device_info = 4;
+}
+
+message AuthenticateCredentialsResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int32 expires_in = 3;
+  UserInfo user = 4;
+}
+
+message ValidateSessionRequest {
+  string access_token = 1;
+}
+
+message ValidateSessionResponse {
+  bool valid = 1;
+  UserInfo user = 2;
+  repeated string permissions = 3;
+  int64 expires_at = 4;
+}
+
+message RefreshSessionRequest {
+  string refresh_token = 1;
+}
+
+message RefreshSessionResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  int32 expires_in = 3;
+}
+
+message RevokeSessionRequest {
+  string refresh_token = 1;
+  string access_token = 2;
+}
+
+message RevokeSessionResponse {
+  bool success = 1;
+}
+
+message ProvisionIdentityRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+  string tenant_id = 4;
+  string organization_id = 5;
+  string hospital_id = 6;
+}
+
+message ProvisionIdentityResponse {
+  string user_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  int32 expires_in = 4;
+}
+
+message UpdateCredentialsRequest {
+  string user_id = 1;
+  string current_password = 2;
+  string new_password = 4;
+  bool enable_mfa = 5;
+  string mfa_type = 6;
+}
+
+message UpdateCredentialsResponse {
+  bool success = 1;
+  string mfa_secret = 2;
+  string mfa_qr_code = 3;
+  repeated string backup_codes = 4;
+}
+
+message InitiateMFAChallengeRequest {
+  string user_id = 1;
+  string mfa_type = 2;  // "totp" | "webauthn"
+}
+
+message InitiateMFAChallengeResponse {
+  string challenge_id = 1;
+  string mfa_type = 2;
+  // For TOTP enrollment: secret and QR code (base64 PNG)
+  string totp_secret = 3;
+  string totp_qr_code = 4;
+}
+
+message VerifyMFAChallengeRequest {
+  string user_id = 1;
+  string code = 2;
+  string challenge_id = 3;
+}
+
+message VerifyMFAChallengeResponse {
+  bool verified = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+}
+
+message GetEffectivePermissionsRequest {
+  string user_id = 1;
+}
+
+message GetEffectivePermissionsResponse {
+  repeated string permissions = 1;
+  repeated UserRole roles = 2;
+}
+
+message UserInfo {
+  string id = 1;
+  string username = 2;
+  string email = 3;
+  string tenant_id = 4;
+  string organization_id = 5;
+  string hospital_id = 6;
+  repeated UserRole roles = 7;
+}
+
+message UserRole {
+  string role_id = 1;
+  string name = 2;
+  string tenant_id = 3;
+}
+
+message HealthCheckResponse {
+  string status  = 1; // "ok" | "degraded"
+  string version = 2;
+}

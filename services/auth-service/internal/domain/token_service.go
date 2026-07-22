@@ -11,7 +11,7 @@ type TokenPair struct {
 }
 
 type TokenService interface {
-	GenerateTokenPair(ctx context.Context, user *User) (*TokenPair, error)
+	GenerateTokenPair(ctx context.Context, user *User, roles []string, permissions []string, permVersion int64) (*TokenPair, error)
 	ValidateAccessToken(ctx context.Context, token string) (*User, error)
 	ValidateRefreshToken(ctx context.Context, token string) (*User, error)
 }
